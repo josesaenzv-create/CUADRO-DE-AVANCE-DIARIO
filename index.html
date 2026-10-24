@@ -34,7 +34,7 @@
 
     <script type="text/babel">
         // ============================================================================
-        // 1. CONEXIÓN OFICIAL A TUS SERVIDORES DE GOOGLE APPS SCRIPT
+        // 1. CONEXIÓN OFICIAL A TUS SERVIDORES
         // ============================================================================
         const GAS_DESEMBOLSOS_URL = "https://script.google.com/macros/s/AKfycbwNGWBib_Y6o5Qr13w8ppSbEckXXjtx3AHtxgN-rAlaBew4DSLVdqRwkGzTRnepRZZe/exec";
         const GAS_USUARIOS_URL    = "https://script.google.com/macros/s/AKfycbyPGo-OSC0KZcz03bAMpKQ82cipc2T1LNztaI229FhYqqNNXqG1oSb6hPPgVSSU3piqiw/exec";
@@ -46,15 +46,30 @@
 
         const LETRAS_EQUIPOS = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
 
-        const FERIADOS_PERU_MM_DD = [
-            "01-01", "04-02", "04-03", "05-01", "06-07", "06-29",
-            "07-23", "07-28", "07-29", "08-06", "08-30", "10-08",
-            "11-01", "12-08", "12-09", "12-25"
-        ];
+        // Catálogo oficial de Feriados Obligatorios en el Perú
+        const FERIADOS_PERU_CATALOGO = {
+            "01-01": "Año Nuevo",
+            "04-02": "Jueves Santo",
+            "04-03": "Viernes Santo",
+            "05-01": "Día del Trabajo",
+            "06-07": "Batalla de Arica y Día de la Bandera",
+            "06-29": "San Pedro y San Pablo",
+            "07-23": "Día de la Fuerza Aérea del Perú",
+            "07-28": "Fiestas Patrias",
+            "07-29": "Fiestas Patrias",
+            "08-06": "Batalla de Junín",
+            "08-30": "Santa Rosa de Lima",
+            "10-08": "Combate de Angamos",
+            "11-01": "Día de Todos los Santos",
+            "12-08": "Inmaculada Concepción",
+            "12-09": "Batalla de Ayacucho",
+            "12-25": "Navidad"
+        };
+
+        const FERIADOS_PERU_MM_DD = Object.keys(FERIADOS_PERU_CATALOGO);
 
         /**
-         * ESPEJO SINCRONIZADO DE TU HOJA "USUARIOS"
-         * Se combina en tiempo real con GAS_USUARIOS_URL (Solo visible tras iniciar sesión)
+         * ESPEJO SINCRONIZADO DEL SERVIDOR DE USUARIOS
          */
         const DIRECTORIO_USUARIOS_HOJA_BASE = [
             { usuario: "CRISTHIAN.TRINIDAD", cargo: "Gerente", sedePrincipal: "TODAS", sedesZona: "TODAS", area: "Gerencia", equipo: "TODOS", jefeAsignado: "Gerencia General", estado: "HABILITADO" },
@@ -75,12 +90,16 @@
             "HUANUCO": 150000
         };
 
+        const quitarTildes = (str) => {
+            return String(str || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        };
+
         /**
          * FORMATEADOR OFICIAL: Primer Nombre + "." + Primera Letra del Apellido (Ej: GUILLERMO.C)
          */
         const formatearNombreCorto = (rawNombre) => {
             if (!rawNombre) return "";
-            const limpio = String(rawNombre)
+            const limpio = quitarTildes(rawNombre)
                 .replace(/\(\s*[A-J]\s*\)/gi, "")
                 .replace(/-\s*EQUIPO\s*[A-J]\b/gi, "")
                 .trim()
@@ -88,7 +107,7 @@
 
             if (!limpio) return "";
 
-            if (/^[A-ZÁÉÍÓÚÑ]+\.[A-ZÁÉÍÓÚÑ]$/.test(limpio)) {
+            if (/^[A-ZÑ]+\.[A-ZÑ]$/.test(limpio)) {
                 const [p, l] = limpio.split(".");
                 return `${p === "MELISA" ? "MELISSA" : p === "HEYDI" ? "HEIDY" : p}.${l}`;
             }
@@ -116,15 +135,15 @@
 
         const normalizarRegistroUsuario = (u) => {
             const rawUser = String(u.usuario || u.nombre || "").trim();
-            const upperUser = rawUser.toUpperCase();
+            const upperUser = quitarTildes(rawUser).toUpperCase();
             const baseMatch = DIRECTORIO_USUARIOS_HOJA_BASE.find(b =>
-                b.usuario.toUpperCase() === upperUser ||
+                quitarTildes(b.usuario).toUpperCase() === upperUser ||
                 formatearNombreCorto(b.usuario) === formatearNombreCorto(upperUser)
             );
 
             const combinado = { ...(baseMatch || {}), ...u };
-            const sedePrincipal = String(combinado.sedePrincipal || combinado.SEDE_PRINCIPAL || combinado.sede || baseMatch?.sedePrincipal || "HUACHO").trim().toUpperCase();
-            const sedesZona = String(combinado.sedesZona || combinado.SEDES_ZONA || combinado.zona || baseMatch?.sedesZona || sedePrincipal).trim().toUpperCase();
+            const sedePrincipal = quitarTildes(combinado.sedePrincipal || combinado.SEDE_PRINCIPAL || combinado.sede || baseMatch?.sedePrincipal || "HUACHO").trim().toUpperCase();
+            const sedesZona = quitarTildes(combinado.sedesZona || combinado.SEDES_ZONA || combinado.zona || baseMatch?.sedesZona || sedePrincipal).trim().toUpperCase();
             const cargoOriginal = String(combinado.cargoOriginal || combinado.CARGO || combinado.cargo || baseMatch?.cargo || "Asesor").trim();
             const area = String(combinado.area || combinado.AREA || baseMatch?.area || "Créditos Individuales").trim();
             const equipo = normalizarEquipoTexto(combinado.equipo || combinado.EQUIPO || baseMatch?.equipo || "SIN EQUIPO");
@@ -164,31 +183,80 @@
             return `${dias[dt.getDay()]} ${String(diaNumero).padStart(2, '0')}/${numMesStr}`;
         };
 
-        const calcularDiasHabilesMes = (mesNombre, anio = new Date().getFullYear()) => {
+        /**
+         * MOTOR DETALLADO Y CONFIGURABLE DE DÍAS HÁBILES DEL MES
+         * La financiera trabaja de Lunes a Sábado y descansa Domingos y Feriados Obligatorios en el Perú.
+         * Permite además incluir/excluir manualmente cualquier día si se requiere configurar.
+         */
+        const calcularDetalleDiasHabilesMes = (mesNombre, overridesDiasMes = {}, ultimoDiaConOperaciones = null, anio = new Date().getFullYear()) => {
             const mIdx = MESES_ANIO.indexOf(mesNombre);
             const mesNum = mIdx >= 0 ? mIdx : new Date().getMonth();
             const ultimoDia = new Date(anio, mesNum + 1, 0).getDate();
             const hoy = new Date();
             const esMesActual = hoy.getMonth() === mesNum && hoy.getFullYear() === anio;
-            const diaCorte = esMesActual ? hoy.getDate() : ultimoDia;
 
+            // Día de corte para el avance: si es el mes actual toma el mayor entre el día de hoy y el último día con desembolsos registrados
+            const diaCorteAutomatico = esMesActual
+                ? Math.max(hoy.getDate(), Number(ultimoDiaConOperaciones) || 1)
+                : (Number(ultimoDiaConOperaciones) > 0 ? Math.max(Number(ultimoDiaConOperaciones), ultimoDia) : ultimoDia);
+
+            const nombresDiasCorto = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+            const detalleDias = [];
             let totalHabilesMes = 0;
             let habilesTranscurridos = 0;
+            let totalDomingos = 0;
+            let totalFeriadosLunesASabado = 0;
 
             for (let d = 1; d <= ultimoDia; d++) {
                 const fecha = new Date(anio, mesNum, d, 12, 0, 0);
                 const dow = fecha.getDay();
                 const mmdd = String(mesNum + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
-                const esHabil = dow !== 0 && !FERIADOS_PERU_MM_DD.includes(mmdd);
-                if (esHabil) {
+                const nombreFeriado = FERIADOS_PERU_CATALOGO[mmdd] || null;
+                const esDomingo = dow === 0;
+                const esFeriado = Boolean(nombreFeriado);
+
+                // Regla automática: Lunes a Sábado (dow !== 0) y que NO sea feriado obligatorio en el Perú
+                const esHabilPorDefecto = !esDomingo && !esFeriado;
+
+                // Si el usuario configuró manualmente este día en el desglosable, se respeta su configuración
+                const tieneOverride = Object.prototype.hasOwnProperty.call(overridesDiasMes, d);
+                const esHabilEfectivo = tieneOverride ? Boolean(overridesDiasMes[d]) : esHabilPorDefecto;
+
+                if (esDomingo) totalDomingos++;
+                if (!esDomingo && esFeriado) totalFeriadosLunesASabado++;
+
+                if (esHabilEfectivo) {
                     totalHabilesMes++;
-                    if (d <= diaCorte) habilesTranscurridos++;
+                    if (d <= diaCorteAutomatico) {
+                        habilesTranscurridos++;
+                    }
                 }
+
+                detalleDias.push({
+                    dia: d,
+                    mmdd,
+                    nombreDiaSemana: nombresDiasCorto[dow],
+                    esDomingo,
+                    esFeriado,
+                    nombreFeriado,
+                    esHabilPorDefecto,
+                    esHabilEfectivo,
+                    modificadoManual: tieneOverride,
+                    dentroDeCorteAvance: d <= diaCorteAutomatico
+                });
             }
+
             return {
+                anio,
+                mesNum,
+                ultimoDia,
+                diaCorteAutomatico,
                 totalHabilesMes: Math.max(1, totalHabilesMes),
                 habilesTranscurridos: Math.max(1, habilesTranscurridos),
-                habilesRestantes: Math.max(1, totalHabilesMes - habilesTranscurridos)
+                habilesRestantes: Math.max(0, totalHabilesMes - habilesTranscurridos),
+                totalDomingos,
+                totalFeriadosLunesASabado,
+                detalleDias
             };
         };
 
@@ -253,7 +321,7 @@
         }
 
         // ============================================================================
-        // 3. MOTOR DE CÁLCULO FINANCIERO + DETECTOR DE LAS 3 ETAPAS DE PIPELINE / CAJA
+        // 3. MOTOR DE CÁLCULO FINANCIERO + DETECTOR DE LAS 3 ETAPAS DE PROYECCIÓN
         // ============================================================================
         const parseNum = (v) => {
             if (typeof v === 'number') return isNaN(v) ? 0 : v;
@@ -546,7 +614,7 @@
             }
 
             return {
-                sede: String(m.sede || "").trim().toUpperCase(),
+                sede: quitarTildes(m.sede || "").trim().toUpperCase(),
                 asesor: asesorLimpio === "__OFICINA__" ? "__OFICINA__" : formatearNombreCorto(asesorLimpio),
                 asesorRaw: asesorLimpio,
                 mes: mesDetectado,
@@ -580,16 +648,10 @@
         const extraerSedesZonal = (sedeStr, zonaStr) => {
             const combinado = `${zonaStr || ""},${sedeStr || ""}`.toUpperCase();
             if (combinado.includes("TODAS")) return ["TODAS"];
-            const partes = combinado.split(/[,;/|+]+/).map(s => s.trim()).filter(Boolean);
+            const partes = combinado.split(/[,;/|+]+/).map(s => quitarTildes(s).trim()).filter(Boolean);
             return partes.length > 0 ? Array.from(new Set(partes)) : ["HUACHO"];
         };
 
-        /**
-         * DETECTOR DE LAS 3 ETAPAS DE PROYECCIÓN PREVIA AL DESEMBOLSO:
-         * 1. "EN_CAJA"       -> [EN CAJA] Listo en ventanilla por desembolsar
-         * 2. "POR_APROBAR"   -> [POR APROBAR] En comité / evaluación pendiente de aprobación
-         * 3. "POR_PRESENTAR" -> [POR PRESENTAR] En armado de expediente por presentar
-         */
         const obtenerEtapaPipeline = (m) => {
             if (!m) return null;
             const fmt = String(m.formato || "").toUpperCase();
@@ -652,7 +714,7 @@
                     const data = await res.json();
 
                     if (data && data.status === "ok" && data.token && data.usuario) {
-                        const inputUpper = usuario.trim().toUpperCase();
+                        const inputUpper = quitarTildes(usuario.trim()).toUpperCase();
                         const matchOficial = (catalogoUsuariosOficial || []).find(u =>
                             u.usuarioUpper === inputUpper ||
                             u.nombreCorto === formatearNombreCorto(inputUpper)
@@ -693,7 +755,7 @@
                             }
                         }, remember);
                     } else {
-                        setError(data?.message || "❌ Credenciales inválidas o usuario no autorizado.");
+                        setError(data?.message || "❌ Credenciales inválidas o usuario no autorizado en el servidor.");
                     }
                 } catch (err) {
                     setError("⚠️ Error de conexión con el servidor seguro. Verifica tu internet.");
@@ -778,7 +840,7 @@
                                 disabled={loading}
                                 className="w-full bg-[#59B447] hover:bg-[#4a9c3a] active:scale-[0.99] text-white font-extrabold py-3.5 rounded-2xl shadow-lg transition-all text-sm uppercase tracking-wider disabled:opacity-50"
                             >
-                                {loading ? "🔐 Verificando Credenciales..." : "Ingresar al Sistema ➔"}
+                                {loading ? "🔐 Verificando en el Servidor..." : "Ingresar al Sistema ➔"}
                             </button>
                         </form>
                     </div>
@@ -1120,10 +1182,8 @@
                     </div>
                 </div>
             );
-        }
-
-        // ============================================================================
-        // 6. COMPONENTES DE GRÁFICOS VECTORIALES CORREGIDOS (NOMBRES CORTOS NOMBRE.A)
+        }// ============================================================================
+        // 6. COMPONENTES DE GRÁFICOS VECTORIALES (NOMBRES CORTOS NOMBRE.A Y AGENCIAS)
         // ============================================================================
         function LienzoSVGLineal({
             titulo, subtitulo = "", etiquetaEjeY, serieActual, serieComparada = null,
@@ -1305,13 +1365,15 @@
         }
 
         function GraficoColumnasVerticalesSVG({
-            titulo = "🏆 Cumplimiento de Metas por Asesor de Negocios",
+            titulo = "🏆 Cumplimiento de Metas",
+            etiquetaEjeX = "ASESORES OFICIALES (FORMATO: NOMBRE.A)",
             items = [],
             modoVisual = "MISMO_GRAFICO",
             mostrarComparativa = false,
             labelActual = "MES ACTUAL",
             labelComparado = "MES ANTERIOR",
-            tipoUnidad = "PORCENTAJE"
+            tipoUnidad = "PORCENTAJE",
+            onSelectConcepto = null
         }) {
             const formatearEtiqueta = (v) => {
                 if (tipoUnidad === "PORCENTAJE") return `${parseNum(v).toFixed(1)}%`;
@@ -1384,7 +1446,12 @@
                                         const hAntPct = Math.min(100, Math.max(vAnt > 0 ? 3 : 1, (vAnt / maxVal) * 100));
 
                                         return (
-                                            <div key={idx} className="flex-1 min-w-[60px] max-w-[100px] h-full flex flex-col justify-end items-center relative z-10 px-0.5">
+                                            <div
+                                                key={idx}
+                                                onClick={() => { if (onSelectConcepto && it.esAgencia) onSelectConcepto(it.concepto); }}
+                                                className={`flex-1 min-w-[60px] max-w-[110px] h-full flex flex-col justify-end items-center relative z-10 px-0.5 ${onSelectConcepto && it.esAgencia ? "cursor-pointer group" : ""}`}
+                                                title={onSelectConcepto && it.esAgencia ? `Haz clic para ver el detalle de asesores de la agencia ${it.concepto}` : it.concepto}
+                                            >
                                                 {mostrarDosSeries && (
                                                     <div className={`mb-1 px-1 py-0.2 rounded text-[8.5px] font-black leading-tight text-center truncate max-w-full ${diff > 0 ? "bg-emerald-100 text-emerald-800" : diff < 0 ? "bg-rose-100 text-rose-700" : "bg-slate-100 text-slate-500"}`}>
                                                         {diff > 0 ? `+${tipoUnidad === "PORCENTAJE" ? diff.toFixed(0) + "%" : formatShortSoles(diff)}` : diff < 0 ? `${tipoUnidad === "PORCENTAJE" ? diff.toFixed(0) + "%" : formatShortSoles(diff)}` : "0%"}
@@ -1421,15 +1488,15 @@
                                                     </div>
                                                 )}
 
-                                                <div className="absolute -bottom-6 text-[10px] font-black text-slate-800 uppercase tracking-tight text-center truncate w-full px-0.5" title={it.concepto}>
-                                                    {it.concepto}
+                                                <div className="absolute -bottom-6 text-[10px] font-black text-slate-800 group-hover:text-[#59B447] uppercase tracking-tight text-center truncate w-full px-0.5">
+                                                    {it.esAgencia ? `📍 ${it.concepto}` : it.concepto}
                                                 </div>
                                             </div>
                                         );
                                     })}
                                 </div>
                                 <div className="text-center text-[10px] font-black text-slate-500 uppercase mt-6">
-                                    ASESORES OFICIALES (FORMATO: NOMBRE.A)
+                                    {etiquetaEjeX}
                                 </div>
                             </div>
                         </div>
@@ -1447,14 +1514,16 @@
             }
 
             return renderizarCanvasColumnas(items, titulo, mostrarComparativa, modoVisual === "SUPERPUESTO", false);
-        }// ============================================================================
-        // 6B. PANEL EJECUTIVO DE ESTADÍSTICAS (CONECTADO A LA HOJA OFICIAL "USUARIOS")
+        }
+
+        // ============================================================================
+        // 6B. PANEL EJECUTIVO DE ESTADÍSTICAS (CON DESGLOSE DE DÍAS HÁBILES Y COLUMNAS POR AGENCIA/ASESOR)
         // ============================================================================
         function PanelGraficosEstadisticos({
             movimientos, expedientesCaja, sedesCatalogo, asesoresOficialesVista,
             obtenerMetaOficinaPorMes, obtenerMetaAsesorPorMes,
             isGerente, isJefeZonal, isAdmin, isLiderEquipo, isJefeGrupal,
-            userSede, sedesPermitidasUsuario, selectedSedeVista, filtroMes,
+            userSede, sedesPermitidasUsuario, selectedSedeVista, setSelectedSedeVista, filtroMes,
             filtroEquipo, setFiltroEquipo, filtroJefeAsignado, setFiltroJefeAsignado,
             filtroArea, setFiltroArea, listaJefesAsignados
         }) {
@@ -1466,6 +1535,17 @@
             const [unidadColumnas, setUnidadColumnas] = React.useState("PORCENTAJE");
             const [incluirColaCaja, setIncluirColaCaja] = React.useState(false);
             const [diaInspeccion, setDiaInspeccion] = React.useState("TODOS");
+
+            // Estado para abrir/cerrar el desglosable de días hábiles al tocar PROMEDIO DÍA HÁBIL o META DIARIA H. MES
+            const [mostrarDesgloseDias, setMostrarDesgloseDias] = React.useState(false);
+
+            // Configuración persistente de días hábiles por mes (Calendario Lunes a Sábado sin Domingos ni Feriados)
+            const [configDiasPorMes, setConfigDiasPorMes] = React.useState(() => {
+                try {
+                    const saved = localStorage.getItem("crediban_config_dias_habiles");
+                    return saved ? JSON.parse(saved) : {};
+                } catch (e) { return {}; }
+            });
 
             React.useEffect(() => {
                 if (filtroMes !== "TODOS") {
@@ -1496,6 +1576,60 @@
                 });
             }, [fuenteMovs, isGerente, isJefeZonal, selectedSedeVista, sedesPermitidasUsuario, userSede, nombresCortosPermitidos]);
 
+            // Último día con operaciones registradas en el mes para ayudar al cálculo automático de avance diario
+            const ultimoDiaConOperacionesMes = React.useMemo(() => {
+                const delMes = movsJerarquia.filter(m => m.mesRegistro === mesActualBase);
+                if (delMes.length === 0) return null;
+                return Math.max(...delMes.map(m => Number(m.diaSistema) || 1));
+            }, [movsJerarquia, mesActualBase]);
+
+            const configMesActual = configDiasPorMes[mesActualBase] || { overridesDias: {}, manualMeta: "", manualAvance: "" };
+
+            const infoHabilesDetallada = React.useMemo(() => {
+                return calcularDetalleDiasHabilesMes(
+                    mesActualBase,
+                    configMesActual.overridesDias || {},
+                    ultimoDiaConOperacionesMes
+                );
+            }, [mesActualBase, configMesActual.overridesDias, ultimoDiaConOperacionesMes]);
+
+            // Cantidad de días hábiles efectivos para ambos indicadores (Automático Lun-Sáb sin feriados o Configurable)
+            const diasConsideradosMetaMes = parseNum(configMesActual.manualMeta) > 0
+                ? parseNum(configMesActual.manualMeta)
+                : infoHabilesDetallada.totalHabilesMes;
+
+            const diasConsideradosAvance = parseNum(configMesActual.manualAvance) > 0
+                ? parseNum(configMesActual.manualAvance)
+                : infoHabilesDetallada.totalHabilesMes;
+
+            const handleToggleDiaHabilCalendario = (diaNum, estadoActualEfectivo) => {
+                const actualMes = configDiasPorMes[mesActualBase] || { overridesDias: {}, manualMeta: "", manualAvance: "" };
+                const nuevosOverrides = { ...(actualMes.overridesDias || {}), [diaNum]: !estadoActualEfectivo };
+                const nuevoGlobal = {
+                    ...configDiasPorMes,
+                    [mesActualBase]: { ...actualMes, overridesDias: nuevosOverrides }
+                };
+                setConfigDiasPorMes(nuevoGlobal);
+                localStorage.setItem("crediban_config_dias_habiles", JSON.stringify(nuevoGlobal));
+            };
+
+            const handleCambiarDiasManual = (campo, valor) => {
+                const actualMes = configDiasPorMes[mesActualBase] || { overridesDias: {}, manualMeta: "", manualAvance: "" };
+                const nuevoGlobal = {
+                    ...configDiasPorMes,
+                    [mesActualBase]: { ...actualMes, [campo]: valor }
+                };
+                setConfigDiasPorMes(nuevoGlobal);
+                localStorage.setItem("crediban_config_dias_habiles", JSON.stringify(nuevoGlobal));
+            };
+
+            const handleRestaurarDiasAutomaticos = () => {
+                const copia = { ...configDiasPorMes };
+                delete copia[mesActualBase];
+                setConfigDiasPorMes(copia);
+                localStorage.setItem("crediban_config_dias_habiles", JSON.stringify(copia));
+            };
+
             const datosAgenciaSuperior = React.useMemo(() => {
                 const movsAct = movsJerarquia.filter(m => m.mesRegistro === mesActualBase && (diaInspeccion === "TODOS" || Number(m.diaSistema) === Number(diaInspeccion)));
                 const movsAnt = movsJerarquia.filter(m => m.mesRegistro === mesComparar && (diaInspeccion === "TODOS" || Number(m.diaSistema) === Number(diaInspeccion)));
@@ -1522,9 +1656,9 @@
                 const avanceAnteriorSoles = movsAnt.reduce((acc, m) => acc + parseNum(m.monto), 0);
                 const pctAvance = metaTotalVista > 0 ? (avanceTotalSoles / metaTotalVista) * 100 : 0;
 
-                const infoHabiles = calcularDiasHabilesMes(mesActualBase);
-                const porDiaHabil = Math.round(avanceTotalSoles / 30);
-                const porDiaHMesMeta = Math.round(metaTotalVista / infoHabiles.totalHabilesMes);
+                // Cálculo automático con los días hábiles considerados (Lunes a Sábado menos feriados del Perú, o configurados)
+                const porDiaHabil = Math.round(avanceTotalSoles / Math.max(1, diasConsideradosAvance));
+                const porDiaHMesMeta = Math.round(metaTotalVista / Math.max(1, diasConsideradosMetaMes));
 
                 let serieActual = [];
                 let serieComparada = [];
@@ -1585,10 +1719,17 @@
                     pctAvance, porDiaHabil, porDiaHMesMeta,
                     serieActual, serieComparada
                 };
-            }, [movsJerarquia, mesActualBase, mesComparar, diaInspeccion, agrupacionTiempo, filtroEquipo, filtroJefeAsignado, filtroArea, asesoresOficialesVista, sedesCatalogo, isGerente, isJefeZonal, selectedSedeVista, sedesPermitidasUsuario, userSede, obtenerMetaOficinaPorMes, obtenerMetaAsesorPorMes]);
+            }, [movsJerarquia, mesActualBase, mesComparar, diaInspeccion, agrupacionTiempo, filtroEquipo, filtroJefeAsignado, filtroArea, asesoresOficialesVista, sedesCatalogo, isGerente, isJefeZonal, selectedSedeVista, sedesPermitidasUsuario, userSede, obtenerMetaOficinaPorMes, obtenerMetaAsesorPorMes, diasConsideradosAvance, diasConsideradosMetaMes]);
+
+            /**
+             * REGLA QUIRÚRGICA SOLICITADA:
+             * - Si estamos en la vista general ("TODAS" las sedes para Gerente/Zonal), el gráfico de columnas muestra el CUMPLIMIENTO POR AGENCIA.
+             * - Cuando se selecciona una agencia en específico (o para Administradores/Líderes de una agencia), muestra el CUMPLIMIENTO POR ASESOR de esa agencia.
+             */
+            const mostrarColumnasPorAgencia = (isGerente || isJefeZonal) && selectedSedeVista === "TODAS" && filtroEquipo === "TODOS" && filtroJefeAsignado === "TODOS" && filtroArea === "TODAS";
 
             const itemsColumnasConcepto = React.useMemo(() => {
-                if (agrupacionTiempo === "SEDES" && (isGerente || isJefeZonal)) {
+                if (mostrarColumnasPorAgencia || (agrupacionTiempo === "SEDES" && (isGerente || isJefeZonal))) {
                     return sedesCatalogo
                         .filter(s => isGerente || sedesPermitidasUsuario.includes("TODAS") || sedesPermitidasUsuario.includes(s.nombre))
                         .map(s => {
@@ -1598,6 +1739,7 @@
                             const mAnt = fuenteMovs.filter(m => m.sede === s.nombre && m.mesRegistro === mesComparar && (diaInspeccion === "TODOS" || Number(m.diaSistema) === Number(diaInspeccion))).reduce((a, b) => a + parseNum(b.monto), 0);
                             return {
                                 concepto: s.nombre,
+                                esAgencia: true,
                                 actualMonto: mAct,
                                 anteriorMonto: mAnt,
                                 meta: metaAct,
@@ -1615,6 +1757,7 @@
 
                     return {
                         concepto: a.nombreCorto,
+                        esAgencia: false,
                         actualMonto: mAct,
                         anteriorMonto: mAnt,
                         meta: metaAct,
@@ -1622,7 +1765,7 @@
                         anteriorPct: metaAnt > 0 ? (mAnt / metaAnt) * 100 : 0
                     };
                 });
-            }, [agrupacionTiempo, isGerente, isJefeZonal, sedesCatalogo, sedesPermitidasUsuario, asesoresOficialesVista, fuenteMovs, movsJerarquia, mesActualBase, mesComparar, diaInspeccion, obtenerMetaOficinaPorMes, obtenerMetaAsesorPorMes]);
+            }, [mostrarColumnasPorAgencia, agrupacionTiempo, isGerente, isJefeZonal, sedesCatalogo, sedesPermitidasUsuario, asesoresOficialesVista, fuenteMovs, movsJerarquia, mesActualBase, mesComparar, diaInspeccion, obtenerMetaOficinaPorMes, obtenerMetaAsesorPorMes]);
 
             const graficosDiariosPorAsesor = React.useMemo(() => {
                 return asesoresOficialesVista.map(a => {
@@ -1674,14 +1817,14 @@
                             <div>
                                 <div className="flex flex-wrap items-center gap-2">
                                     <span className="bg-[#1b4332] text-white text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase">
-                                        📈 Tablero Ejecutivo Conectado al Script Oficial de Usuarios
+                                        📈 Tablero Ejecutivo Conectado al Servidor Oficial de Usuarios
                                     </span>
                                     <span className="bg-emerald-100 text-emerald-900 border border-emerald-300 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase">
                                         Asesores Habilitados en Vista: {asesoresOficialesVista.length}
                                     </span>
                                 </div>
                                 <h2 className="text-sm sm:text-base font-black text-slate-900 mt-1">
-                                    Análisis de Colocaciones por Día, Cumplimiento de Metas y Productividad por Asesor (Formato NOMBRE.A)
+                                    Análisis de Colocaciones por Día, Cumplimiento de Metas por Agencia/Asesor y Ritmo Diario
                                 </h2>
                             </div>
 
@@ -1804,6 +1947,7 @@
                         )}
                     </div>
 
+                    {/* BLOQUE 1: GRÁFICO LINEAL DE AGENCIA + GRÁFICO DE COLUMNAS (POR AGENCIA EN GENERAL / POR ASESOR EN AGENCIA ESPECÍFICA) */}
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
                         <div className="lg:col-span-6 space-y-3">
                             {activarComparativa && modoComparacionVisual === "LADO_A_LADO" ? (
@@ -1847,8 +1991,9 @@
                                 />
                             )}
 
-                            <div className="bg-white border-2 border-slate-300 rounded-2xl p-4 shadow-sm max-w-md mx-auto">
-                                <div className="grid grid-cols-2 items-center mb-3">
+                            {/* CUADRO RESUMEN CON CANTIDAD DE DÍAS CONSIDERADOS Y DESGLOSABLE INTERACTIVO AL TOCAR */}
+                            <div className="bg-white border-2 border-slate-300 rounded-2xl p-4 shadow-sm max-w-lg mx-auto space-y-3">
+                                <div className="grid grid-cols-2 items-center">
                                     <div className="text-xs font-black text-slate-600 uppercase">
                                         {diaInspeccion === "TODOS" ? `Avance Global ${mesActualBase}:` : `Aporte Día ${diaInspeccion}:`}
                                     </div>
@@ -1856,50 +2001,251 @@
                                         {datosAgenciaSuperior.pctAvance.toFixed(2)}%
                                     </div>
                                 </div>
+
                                 <table className="w-full text-xs border-collapse border-2 border-slate-800 font-bold">
                                     <tbody>
                                         <tr className="border-b border-slate-800">
-                                            <td className="bg-[#b6d7a8] p-2 uppercase text-slate-950 border-r border-slate-800 w-1/2">META OFICIAL:</td>
-                                            <td className="bg-white p-2 text-right font-black text-slate-950">{formatShortSoles(datosAgenciaSuperior.metaTotalVista)}</td>
+                                            <td className="bg-[#b6d7a8] p-2.5 uppercase text-slate-950 border-r border-slate-800 w-3/5">
+                                                META OFICIAL:
+                                            </td>
+                                            <td className="bg-white p-2.5 text-right font-black text-slate-950">
+                                                {formatShortSoles(datosAgenciaSuperior.metaTotalVista)}
+                                            </td>
                                         </tr>
                                         <tr className="border-b border-slate-800">
-                                            <td className="bg-[#b6d7a8] p-2 uppercase text-slate-950 border-r border-slate-800">
+                                            <td className="bg-[#b6d7a8] p-2.5 uppercase text-slate-950 border-r border-slate-800">
                                                 {diaInspeccion === "TODOS" ? "AVANCE ACUMULADO:" : `DESEMBOLSADO DÍA ${diaInspeccion}:`}
                                             </td>
-                                            <td className="bg-white p-2 text-right font-black text-emerald-800">{formatShortSoles(datosAgenciaSuperior.avanceTotalSoles)}</td>
+                                            <td className="bg-white p-2.5 text-right font-black text-emerald-800">
+                                                {formatShortSoles(datosAgenciaSuperior.avanceTotalSoles)}
+                                            </td>
                                         </tr>
-                                        <tr className="border-b border-slate-800">
-                                            <td className="bg-[#b6d7a8] p-2 uppercase text-slate-950 border-r border-slate-800">PROMEDIO DÍA HÁBIL:</td>
-                                            <td className="bg-white p-2 text-right font-black text-slate-950">{formatShortSoles(datosAgenciaSuperior.porDiaHabil)}</td>
+                                        <tr
+                                            onClick={() => setMostrarDesgloseDias(!mostrarDesgloseDias)}
+                                            className="border-b border-slate-800 cursor-pointer hover:opacity-90 transition"
+                                            title="Toca aquí para abrir el desglose de días hábiles considerados y configurarlos"
+                                        >
+                                            <td className="bg-[#b6d7a8] p-2.5 text-slate-950 border-r border-slate-800">
+                                                <div className="flex items-center justify-between gap-1">
+                                                    <span className="uppercase font-black">PROMEDIO DÍA HÁBIL:</span>
+                                                    <span className="bg-emerald-900 text-white text-[10px] px-2 py-0.5 rounded-full font-black whitespace-nowrap">
+                                                        📅 {diasConsideradosAvance} días {mostrarDesgloseDias ? "▲" : "▼"}
+                                                    </span>
+                                                </div>
+                                                <div className="text-[10px] text-slate-700 font-semibold mt-0.5">
+                                                    Meta obtenida diaria (Toca para ver/editar días)
+                                                </div>
+                                            </td>
+                                            <td className="bg-white p-2.5 text-right font-black text-slate-950 text-sm">
+                                                {formatShortSoles(datosAgenciaSuperior.porDiaHabil)}
+                                            </td>
                                         </tr>
-                                        <tr>
-                                            <td className="bg-[#b6d7a8] p-2 uppercase text-slate-950 border-r border-slate-800">META DIARIA H. MES:</td>
-                                            <td className="bg-white p-2 text-right font-black text-slate-600">{formatShortSoles(datosAgenciaSuperior.porDiaHMesMeta)}</td>
+                                        <tr
+                                            onClick={() => setMostrarDesgloseDias(!mostrarDesgloseDias)}
+                                            className="cursor-pointer hover:opacity-90 transition"
+                                            title="Toca aquí para abrir el desglose de días hábiles considerados y configurarlos"
+                                        >
+                                            <td className="bg-[#b6d7a8] p-2.5 text-slate-950 border-r border-slate-800">
+                                                <div className="flex items-center justify-between gap-1">
+                                                    <span className="uppercase font-black">META DIARIA H. MES:</span>
+                                                    <span className="bg-slate-800 text-white text-[10px] px-2 py-0.5 rounded-full font-black whitespace-nowrap">
+                                                        📅 {diasConsideradosMetaMes} días {mostrarDesgloseDias ? "▲" : "▼"}
+                                                    </span>
+                                                </div>
+                                                <div className="text-[10px] text-slate-700 font-semibold mt-0.5">
+                                                    Meta diaria requerida Lun-Sáb (Toca para desglosar)
+                                                </div>
+                                            </td>
+                                            <td className="bg-white p-2.5 text-right font-black text-slate-600 text-sm">
+                                                {formatShortSoles(datosAgenciaSuperior.porDiaHMesMeta)}
+                                            </td>
                                         </tr>
                                     </tbody>
                                 </table>
+
+                                {/* DESGLOSABLE INTERACTIVO Y CONFIGURABLE DE DÍAS HÁBILES (LUNES A SÁBADO SIN DOMINGOS NI FERIADOS PERÚ) */}
+                                {mostrarDesgloseDias && (
+                                    <div className="bg-slate-50 border-2 border-[#59B447] rounded-2xl p-3.5 space-y-3 text-xs">
+                                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2">
+                                            <div>
+                                                <span className="bg-[#1b4332] text-white text-[10px] font-black px-2 py-0.5 rounded-full uppercase">
+                                                    📅 Desglose de Días Hábiles — {mesActualBase} {infoHabilesDetallada.anio}
+                                                </span>
+                                                <p className="text-[11px] font-bold text-slate-600 mt-1">
+                                                    Horario Financiera: <strong>Lunes a Sábado</strong> (Descansa Domingos y Feriados Oficiales en el Perú).
+                                                </p>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => setMostrarDesgloseDias(false)}
+                                                className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-black px-2.5 py-1 rounded-lg text-[10px]"
+                                            >
+                                                ✕ Cerrar
+                                            </button>
+                                        </div>
+
+                                        {/* Resumen del cálculo automático del mes */}
+                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+                                            <div className="bg-white p-2 rounded-xl border border-slate-200">
+                                                <div className="text-[9.5px] font-bold text-slate-400 uppercase">Días Calendario</div>
+                                                <div className="text-sm font-black text-slate-800">{infoHabilesDetallada.ultimoDia} días</div>
+                                            </div>
+                                            <div className="bg-rose-50 p-2 rounded-xl border border-rose-200">
+                                                <div className="text-[9.5px] font-bold text-rose-700 uppercase">Domingos (-{infoHabilesDetallada.totalDomingos})</div>
+                                                <div className="text-sm font-black text-rose-800">Descanso</div>
+                                            </div>
+                                            <div className="bg-amber-50 p-2 rounded-xl border border-amber-200">
+                                                <div className="text-[9.5px] font-bold text-amber-800 uppercase">Feriados Lun-Sáb</div>
+                                                <div className="text-sm font-black text-amber-900">-{infoHabilesDetallada.totalFeriadosLunesASabado} feriado(s)</div>
+                                            </div>
+                                            <div className="bg-emerald-50 p-2 rounded-xl border border-emerald-300">
+                                                <div className="text-[9.5px] font-black text-emerald-800 uppercase">Días Hábiles Mes</div>
+                                                <div className="text-sm font-black text-emerald-950">{infoHabilesDetallada.totalHabilesMes} días háb.</div>
+                                            </div>
+                                        </div>
+
+                                        {/* Configuración manual opcional para ambos ítems */}
+                                        <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-2">
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-[10px] font-black text-slate-700 uppercase">
+                                                    ⚙️ Configurar Cantidad de Días Manualmente (Opcional):
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    onClick={handleRestaurarDiasAutomaticos}
+                                                    className="text-[10px] font-black text-[#59B447] hover:underline"
+                                                >
+                                                    🔄 Restaurar Cálculo Automático ({infoHabilesDetallada.totalHabilesMes}d)
+                                                </button>
+                                            </div>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                                <div>
+                                                    <label className="text-[10px] font-bold text-slate-500 block mb-0.5">
+                                                        Días para PROMEDIO DÍA HÁBIL (Meta Obtenida):
+                                                    </label>
+                                                    <div className="flex gap-1">
+                                                        <input
+                                                            type="number"
+                                                            min="1"
+                                                            max="31"
+                                                            placeholder={`Auto: ${infoHabilesDetallada.totalHabilesMes} días`}
+                                                            value={configMesActual.manualAvance || ""}
+                                                            onChange={e => handleCambiarDiasManual("manualAvance", e.target.value)}
+                                                            className="w-full border rounded-lg px-2.5 py-1 text-xs font-black bg-slate-50"
+                                                        />
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleCambiarDiasManual("manualAvance", String(infoHabilesDetallada.habilesTranscurridos))}
+                                                            className="bg-emerald-100 hover:bg-emerald-200 text-emerald-900 font-black px-2 py-1 rounded-lg text-[10px] whitespace-nowrap"
+                                                            title="Usar solo los días hábiles transcurridos hasta la fecha de corte"
+                                                        >
+                                                            Usar Transc. ({infoHabilesDetallada.habilesTranscurridos}d)
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <label className="text-[10px] font-bold text-slate-500 block mb-0.5">
+                                                        Días para META DIARIA H. MES (Meta Diaria):
+                                                    </label>
+                                                    <input
+                                                        type="number"
+                                                        min="1"
+                                                        max="31"
+                                                        placeholder={`Auto: ${infoHabilesDetallada.totalHabilesMes} días`}
+                                                        value={configMesActual.manualMeta || ""}
+                                                        onChange={e => handleCambiarDiasManual("manualMeta", e.target.value)}
+                                                        className="w-full border rounded-lg px-2.5 py-1 text-xs font-black bg-slate-50"
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Calendario interactivo de días considerados (Toca cualquier día para habilitarlo o excluirlo) */}
+                                        <div>
+                                            <div className="text-[10px] font-black text-slate-600 uppercase mb-1.5">
+                                                👆 Toca cualquier día para incluirlo o excluirlo como día hábil:
+                                            </div>
+                                            <div className="grid grid-cols-7 gap-1">
+                                                {infoHabilesDetallada.detalleDias.map(dObj => {
+                                                    let bgClase = "bg-emerald-100 text-emerald-950 border-emerald-300";
+                                                    if (!dObj.esHabilEfectivo) {
+                                                        bgClase = dObj.esFeriado
+                                                            ? "bg-amber-100 text-amber-900 border-amber-300 line-through opacity-80"
+                                                            : "bg-rose-100 text-rose-800 border-rose-200 line-through opacity-75";
+                                                    }
+                                                    return (
+                                                        <button
+                                                            key={dObj.dia}
+                                                            type="button"
+                                                            onClick={() => handleToggleDiaHabilCalendario(dObj.dia, dObj.esHabilEfectivo)}
+                                                            className={`p-1 rounded-lg border text-center transition hover:scale-105 ${bgClase}`}
+                                                            title={dObj.esFeriado ? `Feriado Perú: ${dObj.nombreFeriado}` : dObj.esDomingo ? "Domingo (Descanso)" : "Día Operativo (Lun-Sáb)"}
+                                                        >
+                                                            <div className="text-[9px] font-bold opacity-75">{dObj.nombreDiaSemana}</div>
+                                                            <div className="text-[11px] font-black">{dObj.dia}</div>
+                                                            {dObj.esFeriado && <div className="text-[8px] font-black truncate">🇵🇪 Fer.</div>}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                            {/* Lista de Feriados del Mes si existen */}
+                                            {infoHabilesDetallada.detalleDias.some(d => d.esFeriado) && (
+                                                <div className="mt-2 bg-amber-50 border border-amber-200 p-2 rounded-xl text-[10px] font-bold text-amber-900">
+                                                    🇵🇪 <strong>Feriados Oficiales en {mesActualBase}:</strong>{" "}
+                                                    {infoHabilesDetallada.detalleDias
+                                                        .filter(d => d.esFeriado)
+                                                        .map(d => `Día ${d.dia} (${d.nombreDiaSemana} - ${d.nombreFeriado})`)
+                                                        .join(" • ")}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
 
                         <div className="lg:col-span-6 space-y-2">
-                            <div className="flex justify-end">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div className="text-[11px] font-black text-slate-600">
+                                    {mostrarColumnasPorAgencia ? (
+                                        <span className="bg-emerald-100 text-emerald-900 px-2.5 py-1 rounded-lg border border-emerald-300">
+                                            🏢 Mostrando <strong>Cumplimiento por Agencia</strong> (Haz clic en una barra o sede arriba para ver sus asesores)
+                                        </span>
+                                    ) : (
+                                        <span className="bg-blue-100 text-blue-900 px-2.5 py-1 rounded-lg border border-blue-300">
+                                            👥 Mostrando <strong>Cumplimiento por Asesor</strong> de {selectedSedeVista}
+                                        </span>
+                                    )}
+                                </div>
                                 <select value={unidadColumnas} onChange={e => setUnidadColumnas(e.target.value)} className="border border-slate-300 rounded-xl px-3 py-1 text-xs font-black bg-white shadow-sm">
                                     <option value="PORCENTAJE">🎯 Ver Columnas en % de Meta</option>
                                     <option value="SOLES">💸 Ver Columnas en Soles (S/.)</option>
                                 </select>
                             </div>
+
                             <GraficoColumnasVerticalesSVG
-                                titulo={diaInspeccion === "TODOS" ? "🏆 Cumplimiento de Metas por Asesor (Script Usuarios)" : `📍 Desembolsos del Día ${diaInspeccion} por Asesor`}
+                                titulo={
+                                    diaInspeccion !== "TODOS"
+                                        ? (mostrarColumnasPorAgencia ? `📍 Desembolsos del Día ${diaInspeccion} por Agencia` : `📍 Desembolsos del Día ${diaInspeccion} por Asesor`)
+                                        : (mostrarColumnasPorAgencia ? "🏆 Cumplimiento de Metas por Agencia" : `🏆 Cumplimiento de Metas por Asesor (${selectedSedeVista})`)
+                                }
+                                etiquetaEjeX={mostrarColumnasPorAgencia ? "AGENCIAS / SEDES OPERATIVAS (Toca una agencia para ver sus asesores)" : "ASESORES OFICIALES (FORMATO: NOMBRE.A)"}
                                 items={itemsColumnasConcepto}
                                 modoVisual={modoComparacionVisual}
                                 mostrarComparativa={activarComparativa}
                                 labelActual={diaInspeccion === "TODOS" ? mesActualBase : `Día ${diaInspeccion} (${mesActualBase})`}
                                 labelComparado={diaInspeccion === "TODOS" ? mesComparar : `Día ${diaInspeccion} (${mesComparar})`}
                                 tipoUnidad={unidadColumnas}
+                                onSelectConcepto={(sedeClick) => {
+                                    if (setSelectedSedeVista && mostrarColumnasPorAgencia) {
+                                        setSelectedSedeVista(sedeClick);
+                                    }
+                                }}
                             />
                         </div>
                     </div>
 
+                    {/* BLOQUE 2: CUADRÍCULA DE GRÁFICOS LINEALES DIARIOS POR ASESOR OFICIAL (FORMATO NOMBRE.A) */}
                     <div className="space-y-3 pt-2">
                         <div className="bg-[#1b4332] text-white px-5 py-3 rounded-2xl flex flex-wrap justify-between items-center gap-2 shadow-sm">
                             <div>
@@ -1907,7 +2253,7 @@
                                     📊 Ritmo Diario por Asesor Oficial ({mesActualBase}) — Nombres Cortos (NOMBRE.A)
                                 </h3>
                                 <p className="text-[11px] text-emerald-200 font-semibold">
-                                    Sincronizado directamente con la hoja USUARIOS (Sede, Área, Equipo y Jefe Asignado)
+                                    Sincronizado directamente con el Servidor de Usuarios (Sede, Área, Equipo y Jefe Asignado)
                                 </p>
                             </div>
                             <span className="bg-white/15 px-3 py-1 rounded-full text-xs font-extrabold">
@@ -2429,9 +2775,7 @@
                     </div>
                 </div>
             );
-        }
-
-        // ============================================================================
+        }// ============================================================================
         // 7. APLICACIÓN PRINCIPAL CON BARRA DE PESTAÑAS ADAPTABLE Y EMBUDO EN CAJA (3 ETAPAS)
         // ============================================================================
         function App() {
@@ -2584,7 +2928,7 @@
                     }
                 });
                 sedesServidor.forEach(s => {
-                    const nom = String(s.nombre || "").trim().toUpperCase();
+                    const nom = quitarTildes(s.nombre || "").trim().toUpperCase();
                     if (nom && nom !== "NUEVA OFICINA" && nom !== "ICA") {
                         mapaSedes[nom] = {
                             nombre: nom,
@@ -2608,7 +2952,8 @@
 
             const resolverAsesorOficial = React.useCallback((rawNombreAsesor, sedeMovimiento = "") => {
                 if (!rawNombreAsesor) return null;
-                const clean = String(rawNombreAsesor).trim().toUpperCase();
+                const clean = quitarTildes(rawNombreAsesor).trim().toUpperCase();
+                const sedeClean = quitarTildes(sedeMovimiento).trim().toUpperCase();
                 const cortoCandidato = formatearNombreCorto(clean);
 
                 let match = listaAsesoresOficiales.find(a =>
@@ -2621,7 +2966,7 @@
                 const p0 = partes[0] === "MELISA" ? "MELISSA" : partes[0] === "HEYDI" ? "HEIDY" : partes[0];
                 match = listaAsesoresOficiales.find(a =>
                     (a.primerNombre === p0 || a.apellido === p0) &&
-                    (!sedeMovimiento || a.sedePrincipal === sedeMovimiento)
+                    (!sedeClean || a.sedePrincipal === sedeClean)
                 );
                 if (match) return match;
 
@@ -2636,7 +2981,7 @@
                         ...m,
                         asesorOriginalBD: m.asesor,
                         asesor: ofi ? ofi.nombreCorto : formatearNombreCorto(m.asesor),
-                        sede: ofi ? ofi.sedePrincipal : m.sede,
+                        sede: ofi ? ofi.sedePrincipal : quitarTildes(m.sede || "").trim().toUpperCase(),
                         esAsesorOficial: Boolean(ofi)
                     };
                 }).filter(m => m.esAsesorOficial);
@@ -2648,17 +2993,17 @@
                     const etapa = obtenerEtapaPipeline(m) || "EN_CAJA";
                     return {
                         ...m,
-                        etapaPipeline: etapa, // "EN_CAJA" | "POR_APROBAR" | "POR_PRESENTAR"
+                        etapaPipeline: etapa,
                         asesorOriginalBD: m.asesor,
                         asesor: ofi ? ofi.nombreCorto : formatearNombreCorto(m.asesor),
-                        sede: ofi ? ofi.sedePrincipal : m.sede,
+                        sede: ofi ? ofi.sedePrincipal : quitarTildes(m.sede || "").trim().toUpperCase(),
                         esAsesorOficial: Boolean(ofi)
                     };
                 }).filter(m => m.esAsesorOficial);
             }, [expedientesCajaRaw, resolverAsesorOficial]);
 
             const userRole = clasificarRolEstricto(session?.usuario?.cargo, session?.usuario?.cargoOriginal, session?.usuario);
-            const userSede = String(session?.usuario?.sedePrincipal || session?.usuario?.sede || "HUACHO").trim().toUpperCase();
+            const userSede = quitarTildes(session?.usuario?.sedePrincipal || session?.usuario?.sede || "HUACHO").trim().toUpperCase();
             const userNombreOriginal = String(session?.usuario?.nombre || "").trim();
 
             const isGerente = userRole === "GERENTE";
@@ -2688,7 +3033,7 @@
                 const tk = tokenToUse || session?.token;
                 if (!tk) return;
                 setLoadingData(true);
-                setSyncMsg("Sincronizando con Script Usuarios y Bóveda...");
+                setSyncMsg("Sincronizando con el Servidor...");
                 cargarDirectorioUsuarios();
                 try {
                     const res = await fetch(GAS_DESEMBOLSOS_URL, {
@@ -2711,7 +3056,7 @@
                             setMovimientosRaw(data.movimientos.filter(m => m.formato === "DESEMBOLSO" && !esRegistroExpedienteCaja(m)));
                             setExpedientesCajaRaw(data.movimientos.filter(m => esRegistroExpedienteCaja(m)));
                         }
-                        setSyncMsg("Sincronizado con Script Usuarios ✅");
+                        setSyncMsg("Conectado al Servidor ✅");
                     } else {
                         setSyncMsg("⚠️ " + (data.message || "Error al sincronizar"));
                     }
@@ -2732,7 +3077,7 @@
                         const zonas = extraerSedesZonal(session.usuario.sedePrincipal, session.usuario.sedesZona);
                         setSelectedSedeVista(zonas[0] || "HUACHO");
                     } else {
-                        setSelectedSedeVista(session.usuario.sedePrincipal || session.usuario.sede || "HUACHO");
+                        setSelectedSedeVista(quitarTildes(session.usuario.sedePrincipal || session.usuario.sede || "HUACHO").trim().toUpperCase());
                     }
 
                     if (rol === "JEFE_CREDITO_GRUPAL") {
@@ -2751,7 +3096,7 @@
                         setFiltroJefeAsignado("TODOS");
                     }
 
-                    const sedeBase = (session.usuario.sede === "TODAS" || !session.usuario.sede) ? "HUACHO" : session.usuario.sede.split(",")[0].trim();
+                    const sedeBase = (session.usuario.sede === "TODAS" || !session.usuario.sede) ? "HUACHO" : quitarTildes(session.usuario.sede.split(",")[0]).trim().toUpperCase();
                     setFormSede(sedeBase);
                     setMetaSedeSelect(sedeBase);
 
@@ -2873,11 +3218,6 @@
                 setGrupoIntegrantes(prev => prev.filter((_, idx) => idx !== index));
             };
 
-            /**
-             * Guardar Operación:
-             * - Si etapaPipeline === null -> Se guarda como DESEMBOLSADO OFICIAL
-             * - Si etapaPipeline === "EN_CAJA" | "POR_APROBAR" | "POR_PRESENTAR" -> Se guarda en la etapa correspondiente para la proyección
-             */
             const guardarOperacionEnServidor = async (etapaPipeline = null) => {
                 if (!session?.token) return;
                 if (!etapaPipeline && !puedeDesembolsar) {
@@ -2956,9 +3296,6 @@
             const handleRegistrarDesembolso = (e) => { e.preventDefault(); guardarOperacionEnServidor(null); };
             const handleRegistrarEtapaPipeline = (e) => { e.preventDefault(); guardarOperacionEnServidor(etapaRegistrarForm); };
 
-            /**
-             * Permite mover un expediente entre etapas ("POR_PRESENTAR" -> "POR_APROBAR" -> "EN_CAJA") o pasarlo a DESEMBOLSADO OFICIAL
-             */
             const handleMoverEtapaOEjecutarDesembolso = async (exp, nuevaEtapa = null) => {
                 if (!nuevaEtapa && !puedeDesembolsar) {
                     alert("⛔ Solo Caja o Gerencia pueden ejecutar el desembolso final.");
@@ -3042,7 +3379,7 @@
                     const res = await fetch(GAS_DESEMBOLSOS_URL, {
                         method: "POST",
                         headers: { "Content-Type": "text/plain;charset=utf-8" },
-                        body: JSON.stringify({ action: "crearSede", token: session.token, nombreSede: nuevaSedeNombre.trim().toUpperCase(), metaOficina: parseNum(nuevaSedeMeta) })
+                        body: JSON.stringify({ action: "crearSede", token: session.token, nombreSede: quitarTildes(nuevaSedeNombre).trim().toUpperCase(), metaOficina: parseNum(nuevaSedeMeta) })
                     });
                     const data = await res.json();
                     alert(data.message);
@@ -3074,7 +3411,7 @@
             };
 
             const obtenerMetaOficinaPorMes = React.useCallback((nombreSede, mesConsulta) => {
-                const sClean = String(nombreSede || "").trim().toUpperCase();
+                const sClean = quitarTildes(nombreSede || "").trim().toUpperCase();
                 const mClean = String(mesConsulta || "TODOS").trim().toUpperCase();
                 const metasParseadas = metasAsesores.map(parsearRegistroMeta);
 
@@ -3088,7 +3425,7 @@
             }, [metasAsesores]);
 
             const obtenerMetaAsesorPorMes = React.useCallback((nombreSede, nombreCortoAsesor, mesConsulta) => {
-                const sClean = String(nombreSede || "").trim().toUpperCase();
+                const sClean = quitarTildes(nombreSede || "").trim().toUpperCase();
                 const aCorto = formatearNombreCorto(nombreCortoAsesor);
                 const mClean = String(mesConsulta || "TODOS").trim().toUpperCase();
                 const metasParseadas = metasAsesores.map(parsearRegistroMeta);
@@ -3239,7 +3576,6 @@
                 const totalCN = desembolsos.reduce((acc, d) => acc + (parseInt(d.cantidadCN, 10) || 0), 0);
                 const totalGrupales = desembolsos.filter(d => d.modalidad === "GRUPAL").length;
 
-                // Proyectado solo con lo que está listo en Caja vs Proyectado Integral (Real + En Caja + Por Aprobar + Por Presentar)
                 const proyectadoBruto = totalBruto + cajaBruto;
                 const proyectadoIntegralBruto = totalBruto + cajaBruto + porAprobarBruto + porPresentarBruto;
                 const proyectadoIntegralNeto = totalNeto + cajaNeto + porAprobarNeto + porPresentarNeto;
@@ -3571,7 +3907,7 @@
                                             📋 7. Base Detallada ({movimientosFiltrados.length})
                                         </button>
                                         <button onClick={() => setActiveTab("CONFIG")} className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition ${activeTab === "CONFIG" ? "bg-[#59B447] text-white shadow" : "bg-white text-slate-700 border border-slate-200 hover:bg-slate-200"}`}>
-                                            👥 8. Nómina Usuarios y Metas
+                                            👥 8. Nómina Servidor y Metas
                                         </button>
                                     </>
                                 )}
@@ -3665,6 +4001,7 @@
                                 userSede={userSede}
                                 sedesPermitidasUsuario={sedesPermitidasUsuario}
                                 selectedSedeVista={selectedSedeVista}
+                                setSelectedSedeVista={setSelectedSedeVista}
                                 filtroMes={filtroMes}
                                 filtroEquipo={filtroEquipo}
                                 setFiltroEquipo={setFiltroEquipo}
@@ -4048,13 +4385,9 @@
                             </div>
                         )}
 
-                        {/* ====================================================================
-                            PESTAÑA 4 (MEJORADA): EN CAJA, PENDIENTES POR APROBAR Y POR PRESENTAR
-                            + NUEVO CUADRO RESUMEN PROYECTADO INTEGRAL
-                        ==================================================================== */}
+                        {/* PESTAÑA 4: EN CAJA, PENDIENTES POR APROBAR Y POR PRESENTAR + CUADRO PROYECTADO INTEGRAL */}
                         {activeTab === "EXP_CAJA" && (
                             <div className="space-y-5">
-                                {/* 5 TARJETAS DEL EMBUDO DE PROYECCIÓN INTEGRAL */}
                                 <div className="bg-gradient-to-r from-slate-900 via-[#1b4332] to-slate-900 text-white p-5 rounded-3xl shadow-lg space-y-4">
                                     <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/15 pb-3">
                                         <div>
@@ -4071,7 +4404,6 @@
                                     </div>
 
                                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-                                        {/* 1. Desembolsado Real */}
                                         <div className="bg-white/10 border border-white/15 p-3.5 rounded-2xl">
                                             <div className="text-[10px] font-black text-emerald-300 uppercase">✅ 1. Desembolsado Real</div>
                                             <div className="text-xl font-black text-white mt-1">{formatMoney(resumenAnalitico.totalBruto)}</div>
@@ -4084,7 +4416,6 @@
                                             </div>
                                         </div>
 
-                                        {/* 2. En Caja (Por Desembolsar) */}
                                         <div className="bg-amber-400/20 border-2 border-amber-400 p-3.5 rounded-2xl">
                                             <div className="text-[10px] font-black text-amber-300 uppercase">⏳ 2. En Caja ({resumenAnalitico.cajaOps} op.)</div>
                                             <div className="text-xl font-black text-amber-300 mt-1">{formatMoney(resumenAnalitico.cajaBruto)}</div>
@@ -4097,7 +4428,6 @@
                                             </div>
                                         </div>
 
-                                        {/* 3. Pendientes por Aprobar */}
                                         <div className="bg-blue-500/20 border-2 border-blue-400 p-3.5 rounded-2xl">
                                             <div className="text-[10px] font-black text-blue-200 uppercase">📝 3. Por Aprobar ({resumenAnalitico.porAprobarOps} op.)</div>
                                             <div className="text-xl font-black text-blue-200 mt-1">{formatMoney(resumenAnalitico.porAprobarBruto)}</div>
@@ -4110,7 +4440,6 @@
                                             </div>
                                         </div>
 
-                                        {/* 4. Pendientes por Presentar */}
                                         <div className="bg-purple-500/20 border-2 border-purple-400 p-3.5 rounded-2xl">
                                             <div className="text-[10px] font-black text-purple-200 uppercase">📂 4. Por Presentar ({resumenAnalitico.porPresentarOps} op.)</div>
                                             <div className="text-xl font-black text-purple-200 mt-1">{formatMoney(resumenAnalitico.porPresentarBruto)}</div>
@@ -4123,7 +4452,6 @@
                                             </div>
                                         </div>
 
-                                        {/* 5. Gran Total Proyectado Integral */}
                                         <div className="bg-emerald-500/30 border-2 border-emerald-400 p-3.5 rounded-2xl">
                                             <div className="text-[10px] font-black text-emerald-200 uppercase">🚀 5. Total Proyectado Integral</div>
                                             <div className="text-xl font-black text-white mt-1">{formatMoney(resumenAnalitico.proyectadoIntegralBruto)}</div>
@@ -4138,7 +4466,6 @@
                                     </div>
                                 </div>
 
-                                {/* FORMULARIO PARA INGRESAR CRÉDITOS EN CAJA, PENDIENTES POR APROBAR O PENDIENTES POR PRESENTAR */}
                                 {puedeRegistrarProyeccion && (
                                     <div className="bg-white border-2 border-amber-400 rounded-3xl p-5 shadow-sm space-y-4">
                                         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
@@ -4156,7 +4483,6 @@
                                             </div>
                                         </div>
 
-                                        {/* Selector de las 3 Etapas */}
                                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 bg-slate-100 p-2 rounded-2xl">
                                             <button
                                                 type="button"
@@ -4294,12 +4620,12 @@
                                     </div>
                                 )}
 
-                                {/* NUEVO CUADRO RESUMEN PROYECTADO INTEGRAL POR OFICINA Y ASESOR */}
+                                {/* CUADRO RESUMEN PROYECTADO INTEGRAL POR OFICINA Y ASESOR */}
                                 <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
                                     <div className="bg-slate-900 text-white px-5 py-3.5 flex flex-wrap justify-between items-center gap-2">
                                         <div>
                                             <h3 className="text-xs font-black uppercase tracking-wider">
-                                                📊 Nuevo Cuadro Proyectado Integral por Oficina y Asesor (Real + En Caja + Por Aprobar + Por Presentar)
+                                                📊 Cuadro Proyectado Integral por Oficina y Asesor (Real + En Caja + Por Aprobar + Por Presentar)
                                             </h3>
                                             <p className="text-[11px] text-amber-300 font-semibold">
                                                 Permite a Administración, Jefes de Equipo y Gerencia proyectar el cierre real sumando todas las etapas
@@ -4373,7 +4699,7 @@
                                     </div>
                                 </div>
 
-                                {/* LISTA DETALLADA DE OPERACIONES EN CAJA, POR APROBAR Y POR PRESENTAR CON BOTONES PARA AVANZAR DE ETAPA */}
+                                {/* LISTA DETALLADA DE OPERACIONES EN CAJA, POR APROBAR Y POR PRESENTAR */}
                                 <div className="bg-white rounded-3xl shadow-sm border border-amber-300 overflow-hidden">
                                     <div className="bg-amber-500 text-slate-950 px-5 py-3 flex flex-wrap justify-between items-center gap-2">
                                         <h3 className="text-xs font-black uppercase">
@@ -4521,7 +4847,7 @@
 
                                         <div className="grid grid-cols-2 gap-3">
                                             <div>
-                                                <label className="text-[11px] font-extrabold text-slate-600 uppercase block mb-1">💼 Asesor Oficial (Script Usuarios)</label>
+                                                <label className="text-[11px] font-extrabold text-slate-600 uppercase block mb-1">💼 Asesor Oficial (Servidor)</label>
                                                 <select value={formAsesor} onChange={e => setFormAsesor(e.target.value)} className="w-full border rounded-xl px-3 py-2.5 text-xs font-extrabold bg-white">
                                                     {asesoresDeSedeForm.map(a => <option key={a} value={a}>{a}</option>)}
                                                 </select>
@@ -4721,12 +5047,12 @@
                             </div>
                         )}
 
-                        {/* PESTAÑA 8: DIRECTORIO OFICIAL DE LA HOJA USUARIOS, METAS Y EQUIPOS (A - J) */}
+                        {/* PESTAÑA 8: DIRECTORIO OFICIAL DEL SERVIDOR DE USUARIOS, METAS Y EQUIPOS (A - J) */}
                         {activeTab === "CONFIG" && puedeVerDetalleAvanzado && (
                             <div className="space-y-5">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                     <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-200 space-y-4">
-                                        <h3 className="text-sm font-black uppercase text-slate-800">🎯 Configurar Meta Mensual (Asesores Oficiales del Script Usuarios)</h3>
+                                        <h3 className="text-sm font-black uppercase text-slate-800">🎯 Configurar Meta Mensual (Asesores Oficiales del Servidor)</h3>
                                         <form onSubmit={handleGuardarMetaMensual} className="space-y-3">
                                             <div className="grid grid-cols-2 gap-3">
                                                 <div>
@@ -4749,7 +5075,7 @@
                                             </div>
                                             {metaTipoSelect === "ASESOR" && (
                                                 <select value={metaAsesorNombre} onChange={e => setMetaAsesorNombre(e.target.value)} className="w-full border rounded-xl px-3 py-2 text-xs font-extrabold uppercase bg-white" required>
-                                                    <option value="">-- Selecciona Asesor del Script de Usuarios --</option>
+                                                    <option value="">-- Selecciona Asesor del Servidor de Usuarios --</option>
                                                     {listaAsesoresOficiales
                                                         .filter(a => a.sedePrincipal === (isGerente ? metaSedeSelect : userSede))
                                                         .map(a => (
@@ -4770,7 +5096,7 @@
                                             <form onSubmit={handleCrearNuevaSede} className="space-y-3">
                                                 <input type="text" placeholder="Nombre de la Nueva Sede (Ej: BARRANCA, CHIMBOTE)..." value={nuevaSedeNombre} onChange={e => setNuevaSedeNombre(e.target.value)} className="w-full border rounded-xl px-3 py-2 text-xs font-extrabold uppercase" required />
                                                 <input type="number" step="1000" value={nuevaSedeMeta} onChange={e => setNuevaSedeMeta(e.target.value)} className="w-full border rounded-xl px-3 py-2 text-xs font-black" required />
-                                                <button type="submit" className="w-full bg-[#1b4332] text-white font-black py-3 rounded-2xl text-xs uppercase shadow">➕ Crear Sede en Google Sheets</button>
+                                                <button type="submit" className="w-full bg-[#1b4332] text-white font-black py-3 rounded-2xl text-xs uppercase shadow">➕ Crear Sede en el Servidor</button>
                                             </form>
                                         </div>
                                     )}
@@ -4779,7 +5105,7 @@
                                 <div className="bg-white rounded-3xl shadow-sm border border-emerald-300 overflow-hidden">
                                     <div className="bg-[#1b4332] text-white px-5 py-3.5 flex flex-wrap justify-between items-center gap-2">
                                         <div>
-                                            <h3 className="text-xs font-black uppercase">👥 Directorio Oficial Sincronizado con tu Script de Usuarios ({catalogoUsuariosOficial.length} Usuarios Activos)</h3>
+                                            <h3 className="text-xs font-black uppercase">👥 Directorio Oficial Sincronizado con el Servidor de Usuarios ({catalogoUsuariosOficial.length} Usuarios Activos)</h3>
                                             <p className="text-[11px] text-emerald-200">Muestra el Formato Corto (NOMBRE.A), Cargo, Sede Principal, Área, Equipo (A-J) y Jefe de Equipo Asignado:</p>
                                         </div>
                                     </div>
@@ -4787,7 +5113,7 @@
                                         <table className="w-full text-xs border-collapse">
                                             <thead>
                                                 <tr className="bg-emerald-700 text-white uppercase font-black text-[10px]">
-                                                    <th className="p-2.5 text-left">USUARIO (HOJA)</th>
+                                                    <th className="p-2.5 text-left">USUARIO (SERVIDOR)</th>
                                                     <th className="p-2.5 text-left">FORMATO SISTEMA (NOMBRE.A)</th>
                                                     <th className="p-2.5 text-center">CARGO</th>
                                                     <th className="p-2.5 text-center">SEDE_PRINCIPAL</th>
