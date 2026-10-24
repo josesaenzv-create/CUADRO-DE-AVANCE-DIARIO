@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>CREDIBAN PERÚ - Sistema Integrado con Directorio Oficial de Usuarios</title>
+    <title>CREDIBAN PERÚ - Sistema Ejecutivo de Estadísticas, Desembolsos, Metas y Reportes WhatsApp</title>
     <!-- React & ReactDOM -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -52,109 +52,31 @@
             "11-01", "12-08", "12-09", "12-25"
         ];
 
-        /**
-         * ESPEJO SINCRONIZADO DE TU HOJA "USUARIOS" (IMÁGENES 1 Y 3)
-         * Garantiza que las columnas A..I (Cargo, Sede_Principal, Sedes_Zona, Area, Equipo y Jefe_de_Equipo_Asignado)
-         * estén siempre disponibles y se combinen en vivo con lo que devuelve GAS_USUARIOS_URL.
-         */
-        const DIRECTORIO_USUARIOS_HOJA_BASE = [
-            { usuario: "CRISTHIAN.TRINIDAD", cargo: "Gerente", sedePrincipal: "TODAS", sedesZona: "TODAS", area: "Gerencia", equipo: "TODOS", jefeAsignado: "Gerencia General", estado: "HABILITADO" },
-            { usuario: "MOISES.BORJA", cargo: "Gerente", sedePrincipal: "TODAS", sedesZona: "TODAS", area: "Gerencia", equipo: "SIN EQUIPO", jefeAsignado: "Gerencia General", estado: "HABILITADO" },
-            { usuario: "GUILLERMO.CORONEL", cargo: "Asesor", sedePrincipal: "HUARAZ", sedesZona: "HUARAZ", area: "Créditos Individuales", equipo: "SIN EQUIPO", jefeAsignado: "Roberto Vargas", estado: "HABILITADO", metaBase: 50000 },
-            { usuario: "YOVANA.GARCIA", cargo: "Asesor", sedePrincipal: "HUARAZ", sedesZona: "HUARAZ", area: "Créditos Individuales", equipo: "SIN EQUIPO", jefeAsignado: "Roberto Vargas", estado: "HABILITADO", metaBase: 25000 },
-            { usuario: "SHEILA.POMA", cargo: "Asesor", sedePrincipal: "HUARAZ", sedesZona: "HUARAZ", area: "Créditos Individuales", equipo: "SIN EQUIPO", jefeAsignado: "Lucia Paredes", estado: "HABILITADO", metaBase: 40000 },
-            { usuario: "JOSE.SAENZV", cargo: "Cajero", sedePrincipal: "HUACHO", sedesZona: "HUACHO", area: "Caja", equipo: "SIN EQUIPO", jefeAsignado: "Lucia Paredes", estado: "HABILITADO" },
-            { usuario: "MELISSA.CECILIANO", cargo: "Asesor", sedePrincipal: "HUACHO", sedesZona: "HUACHO", area: "Créditos Individuales", equipo: "EQUIPO A", jefeAsignado: "Carlos Mendoza", estado: "HABILITADO", metaBase: 45000 },
-            { usuario: "ABIGAIL.SANDOVAL", cargo: "Asesor", sedePrincipal: "HUANUCO", sedesZona: "HUANUCO", area: "Créditos Individuales", equipo: "EQUIPO A", jefeAsignado: "Miguel Castro", estado: "HABILITADO", metaBase: 50000 },
-            { usuario: "Jorge Quispe", cargo: "Asesor", sedePrincipal: "HUANUCO", sedesZona: "HUANUCO", area: "Créditos Grupales", equipo: "EQUIPO B", jefeAsignado: "Elena Rojas", estado: "HABILITADO", metaBase: 45000 },
-            { usuario: "Shayra Reyes", cargo: "Cajero", sedePrincipal: "HUANUCO", sedesZona: "HUANUCO", area: "Caja", equipo: "SIN EQUIPO", jefeAsignado: "Lucia Paredes", estado: "HABILITADO" }
-        ];
-
-        const METAS_OFICINA_POR_DEFECTO = {
-            "HUACHO": 300000,
-            "HUARAZ": 115000,
-            "HUANUCO": 150000
-        };
-
-        /**
-         * FORMATEADOR OFICIAL: Primer Nombre + "." + Primera Letra del Apellido
-         * Ejemplos:
-         *  "GUILLERMO.CORONEL" -> "GUILLERMO.C"
-         *  "Jorge Quispe"      -> "JORGE.Q"
-         *  "MELISSA.CECILIANO" -> "MELISSA.C"
-         */
-        const formatearNombreCorto = (rawNombre) => {
-            if (!rawNombre) return "";
-            const limpio = String(rawNombre)
-                .replace(/\(\s*[A-J]\s*\)/gi, "")
-                .replace(/-\s*EQUIPO\s*[A-J]\b/gi, "")
-                .trim()
-                .toUpperCase();
-
-            if (!limpio) return "";
-
-            // Si ya tiene el formato NOMBRE.X (1 sola letra después del punto)
-            if (/^[A-ZÁÉÍÓÚÑ]+\.[A-ZÁÉÍÓÚÑ]$/.test(limpio)) {
-                const [p, l] = limpio.split(".");
-                return `${p === "MELISA" ? "MELISSA" : p === "HEYDI" ? "HEIDY" : p}.${l}`;
+        const HISTORIAL_METAS_BASE = {
+            "JUNIO": {
+                oficinas: { "HUACHO": 270000, "HUARAZ": 70000 },
+                asesores: {
+                    "HUACHO__MELISSA": 40000, "HUACHO__HEIDY": 40000, "HUACHO__HUGO": 60000,
+                    "HUACHO__BRITHANY": 60000, "HUACHO__ARTURO": 45000,
+                    "HUARAZ__SHEILA": 40000, "HUARAZ__YOVANA": 15000, "HUARAZ__NASARIO": 15000
+                }
+            },
+            "JULIO": {
+                oficinas: { "HUACHO": 270000, "HUARAZ": 95000 },
+                asesores: {
+                    "HUACHO__MELISSA": 45000, "HUACHO__HEIDY": 45000, "HUACHO__HUGO": 65000,
+                    "HUACHO__BRITHANY": 65000, "HUACHO__ARTURO": 50000,
+                    "HUARAZ__SHEILA": 40000, "HUARAZ__YOVANA": 15000, "HUARAZ__CORONEL": 40000
+                }
+            },
+            "OCTUBRE": {
+                oficinas: { "HUACHO": 300000, "HUARAZ": 115000 },
+                asesores: {
+                    "HUACHO__MELISSA": 45000, "HUACHO__HEIDY": 45000, "HUACHO__HUGO": 65000,
+                    "HUACHO__BRITHANY": 50000, "HUACHO__ARTURO": 50000, "HUACHO__ABIGAIL": 50000,
+                    "HUARAZ__SHEILA": 40000, "HUARAZ__YOVANA": 25000, "HUARAZ__CORONEL": 50000
+                }
             }
-
-            // Separar por punto, espacio o guion bajo
-            const partes = limpio.split(/[\s._-]+/).filter(Boolean);
-            let primerNombre = partes[0] || "";
-            if (primerNombre === "MELISA") primerNombre = "MELISSA";
-            if (primerNombre === "HEYDI") primerNombre = "HEIDY";
-
-            if (partes.length >= 2 && partes[1].length > 0) {
-                const inicialApellido = partes[1].charAt(0).toUpperCase();
-                return `${primerNombre}.${inicialApellido}`;
-            }
-            return primerNombre;
-        };
-
-        const normalizarEquipoTexto = (rawEq) => {
-            const txt = String(rawEq || "").trim().toUpperCase();
-            if (!txt || txt.includes("SIN EQUIPO") || txt === "NINGUNO") return "SIN EQUIPO";
-            if (txt.includes("TODOS")) return "TODOS";
-            const m = txt.match(/(?:EQUIPO\s*)?([A-J])\b/);
-            if (m) return `EQUIPO ${m[1]}`;
-            return txt;
-        };
-
-        const normalizarRegistroUsuario = (u) => {
-            const rawUser = String(u.usuario || u.nombre || "").trim();
-            const upperUser = rawUser.toUpperCase();
-            // Buscar si existe en el espejo de la hoja USUARIOS para completar columnas E, F, G, H si el endpoint básico no las envió
-            const baseMatch = DIRECTORIO_USUARIOS_HOJA_BASE.find(b =>
-                b.usuario.toUpperCase() === upperUser ||
-                formatearNombreCorto(b.usuario) === formatearNombreCorto(upperUser)
-            );
-
-            const combinado = { ...(baseMatch || {}), ...u };
-            const sedePrincipal = String(combinado.sedePrincipal || combinado.SEDE_PRINCIPAL || combinado.sede || baseMatch?.sedePrincipal || "HUACHO").trim().toUpperCase();
-            const sedesZona = String(combinado.sedesZona || combinado.SEDES_ZONA || combinado.zona || baseMatch?.sedesZona || sedePrincipal).trim().toUpperCase();
-            const cargoOriginal = String(combinado.cargoOriginal || combinado.CARGO || combinado.cargo || baseMatch?.cargo || "Asesor").trim();
-            const area = String(combinado.area || combinado.AREA || baseMatch?.area || "Créditos Individuales").trim();
-            const equipo = normalizarEquipoTexto(combinado.equipo || combinado.EQUIPO || baseMatch?.equipo || "SIN EQUIPO");
-            const jefeAsignado = String(combinado.jefeAsignado || combinado.JEFE_DE_EQUIPO_ASIGNADO || combinado.jefe || baseMatch?.jefeAsignado || "").trim();
-            const estado = String(combinado.estado || combinado.ESTADO || baseMatch?.estado || "HABILITADO").trim().toUpperCase();
-            const nombreCorto = formatearNombreCorto(rawUser);
-
-            return {
-                usuarioOriginal: rawUser,
-                usuarioUpper: upperUser,
-                nombreCorto, // Ej: GUILLERMO.C, MELISSA.C, JORGE.Q
-                primerNombre: upperUser.split(/[\s._-]+/)[0] || upperUser,
-                apellido: upperUser.split(/[\s._-]+/)[1] || "",
-                cargoOriginal,
-                sedePrincipal,
-                sedesZona,
-                area,
-                equipo, // Ej: "EQUIPO A", "EQUIPO B", "SIN EQUIPO"
-                jefeAsignado, // Ej: "Roberto Vargas", "Carlos Mendoza", "Elena Rojas"
-                estado,
-                metaBase: combinado.metaBase || 45000
-            };
         };
 
         const obtenerMesAnterior = (mesActual) => {
@@ -261,7 +183,7 @@
         }
 
         // ============================================================================
-        // 3. MOTOR DE CÁLCULO FINANCIERO + VINCULADOR INTELIGENTE DE USUARIOS
+        // 3. MOTOR DE CÁLCULO FINANCIERO + DETECTOR DE JERARQUÍAS Y EQUIPOS (A - J)
         // ============================================================================
         const parseNum = (v) => {
             if (typeof v === 'number') return isNaN(v) ? 0 : v;
@@ -552,44 +474,68 @@
                 asesorLimpio = partes[0].trim();
                 mesDetectado = (partes[1] || "TODOS").trim();
             }
+            if (asesorLimpio === "MELISA") asesorLimpio = "MELISSA";
 
             return {
                 sede: String(m.sede || "").trim().toUpperCase(),
-                asesor: asesorLimpio === "__OFICINA__" ? "__OFICINA__" : formatearNombreCorto(asesorLimpio),
-                asesorRaw: asesorLimpio,
+                asesor: asesorLimpio,
                 mes: mesDetectado,
                 meta: parseNum(m.meta),
                 estado: String(m.estado || "ACTIVO").trim().toUpperCase()
             };
         };
 
+        const extraerLetraEquipo = (objUsuario) => {
+            if (!objUsuario) return "";
+            const directo = String(objUsuario.equipo || objUsuario.letraEquipo || objUsuario.grupo || "").trim().toUpperCase();
+            if (/^[A-J]$/.test(directo)) return directo;
+
+            const texto = `${objUsuario.cargoOriginal || ""} ${objUsuario.cargo || ""} ${objUsuario.rol || ""} ${objUsuario.usuario || ""} ${objUsuario.nombre || ""}`.toUpperCase();
+            const matchPar = texto.match(/\(\s*([A-J])\s*\)/);
+            if (matchPar) return matchPar[1];
+
+            const matchPalabra = texto.match(/(?:EQUIPO|LIDER|JEFE|GRUPO|SUPERVISOR|ASESOR)\s*(?:DE\s*EQUIPO\s*)?[-:]?\s*([A-J])\b/);
+            if (matchPalabra) return matchPalabra[1];
+
+            const matchGuion = texto.match(/[-/]\s*([A-J])\s*$/);
+            if (matchGuion) return matchGuion[1];
+            return "";
+        };
+
         const clasificarRolEstricto = (cargoPrincipal, cargoOriginal, objCompleto = null) => {
             const raw = String(cargoOriginal || cargoPrincipal || "").trim().toUpperCase();
-            const areaRaw = String(objCompleto?.area || objCompleto?.AREA || "").trim().toUpperCase();
-
             if (raw.includes("GERENTE") || raw.includes("DIRECTOR") || raw.includes("GERENCIA")) return "GERENTE";
             if (raw.includes("ZONAL") || raw.includes("REGIONAL")) return "JEFE_ZONAL";
-            if (raw.includes("GRUPAL") && (raw.includes("JEFE") || raw.includes("LIDER") || raw.includes("COORDINADOR") || raw.includes("SUPERVISOR"))) {
-                return "JEFE_CREDITO_GRUPAL";
-            }
             if (
                 raw.includes("LIDER") || raw.includes("LÍDER") ||
                 raw.includes("JEFE DE EQUIPO") || raw.includes("JEFE EQUIPO") ||
-                raw.includes("JEFE DE GRUPO") || raw.includes("COORDINADOR") || raw.includes("SUPERVISOR")
+                raw.includes("COORDINADOR") || raw.includes("SUPERVISOR")
             ) {
-                return areaRaw.includes("GRUPAL") ? "JEFE_CREDITO_GRUPAL" : "LIDER_EQUIPO";
+                return "LIDER_EQUIPO";
             }
             if (raw.includes("ADMIN") || raw.includes("JEFE DE AGENCIA") || raw.includes("JEFE DE OFICINA")) return "ADMINISTRADOR";
             if (raw.includes("CAJ")) return "CAJERO";
+            if (raw.includes("JEFE") && extraerLetraEquipo(objCompleto || { cargo: raw })) return "LIDER_EQUIPO";
             if (raw.includes("ASESOR") || raw.includes("PROMOTOR") || raw.includes("ANALISTA")) return "ASESOR";
             return String(cargoPrincipal || "ASESOR").trim().toUpperCase();
         };
 
         const extraerSedesZonal = (sedeStr, zonaStr) => {
-            const combinado = `${zonaStr || ""},${sedeStr || ""}`.toUpperCase();
+            const combinado = `${sedeStr || ""},${zonaStr || ""}`.toUpperCase();
             if (combinado.includes("TODAS")) return ["TODAS"];
             const partes = combinado.split(/[,;/|+]+/).map(s => s.trim()).filter(Boolean);
             return partes.length > 0 ? Array.from(new Set(partes)) : ["HUACHO"];
+        };
+
+        const limpiarNombreAsesor = (nom) => {
+            if (!nom) return "";
+            let n = String(nom).trim().toUpperCase();
+            n = n.replace(/\(\s*[A-J]\s*\)/g, "").replace(/-\s*EQUIPO\s*[A-J]\b/g, "").trim();
+            if (n === "MELISA" || n === "HEYDI") {
+                if (n === "MELISA") return "MELISSA";
+                if (n === "HEYDI") return "HEIDY";
+            }
+            return n;
         };
 
         const esRegistroExpedienteCaja = (m) => {
@@ -604,26 +550,23 @@
         };
 
         // ============================================================================
-        // 4. PANTALLA DE LOGIN CONECTADA AL DIRECTORIO UNIFICADO DE USUARIOS
+        // 4. PANTALLA DE LOGIN
         // ============================================================================
-        function LoginScreen({ onLoginSuccess, catalogoUsuariosOficial }) {
+        function LoginScreen({ onLoginSuccess, usersDirectory }) {
             const [usuario, setUsuario] = React.useState("");
             const [clave, setClave] = React.useState("");
             const [showPass, setShowPass] = React.useState(false);
             const [remember, setRemember] = React.useState(true);
             const [loading, setLoading] = React.useState(false);
             const [error, setError] = React.useState("");
-            const [useDropdown, setUseDropdown] = React.useState(true);
+            const [useDropdown, setUseDropdown] = React.useState(false);
 
-            // Lista de usuarios con permiso de ingreso (Gerentes, Jefes Zonales, Administradores, Jefes de Equipo/Grupo, Jefes Grupales y Cajeros)
             const usuariosAutorizadosLista = React.useMemo(() => {
-                const deHoja = (catalogoUsuariosOficial || []).filter(u => {
-                    if (u.estado !== "HABILITADO") return false;
-                    const rol = clasificarRolEstricto(u.cargoOriginal, u.cargoOriginal, u);
-                    return ["GERENTE", "JEFE_ZONAL", "ADMINISTRADOR", "LIDER_EQUIPO", "JEFE_CREDITO_GRUPAL", "CAJERO"].includes(rol);
+                return (usersDirectory || []).filter(u => {
+                    const rol = clasificarRolEstricto(u.cargo, u.cargoOriginal || u.cargo, u);
+                    return ["GERENTE", "JEFE_ZONAL", "ADMINISTRADOR", "LIDER_EQUIPO", "CAJERO"].includes(rol);
                 });
-                return deHoja;
-            }, [catalogoUsuariosOficial]);
+            }, [usersDirectory]);
 
             const handleLogin = async (e) => {
                 e.preventDefault();
@@ -647,26 +590,19 @@
                     const data = await res.json();
 
                     if (data && data.status === "ok" && data.token && data.usuario) {
-                        const inputUpper = usuario.trim().toUpperCase();
-                        const matchOficial = (catalogoUsuariosOficial || []).find(u =>
-                            u.usuarioUpper === inputUpper ||
-                            u.nombreCorto === formatearNombreCorto(inputUpper)
+                        const matchDir = (usersDirectory || []).find(u =>
+                            String(u.usuario || u.nombre || "").trim().toUpperCase() === String(data.usuario.nombre || usuario).trim().toUpperCase()
                         );
-
-                        const usuarioEnriquecido = normalizarRegistroUsuario({
-                            ...(matchOficial || {}),
-                            ...data.usuario,
-                            usuario: matchOficial?.usuarioOriginal || data.usuario.nombre || usuario.trim()
-                        });
-
+                        const usuarioCombinado = { ...matchDir, ...data.usuario };
                         const rolReal = clasificarRolEstricto(
-                            usuarioEnriquecido.cargoOriginal,
-                            data.usuario.cargoOriginal || usuarioEnriquecido.cargoOriginal,
-                            usuarioEnriquecido
+                            usuarioCombinado.cargo,
+                            usuarioCombinado.cargoOriginal || matchDir?.cargo,
+                            usuarioCombinado
                         );
+                        const letraEquipoDetectada = extraerLetraEquipo(usuarioCombinado) || extraerLetraEquipo(matchDir);
 
-                        if (rolReal === "ASESOR") {
-                            setError("⛔ Acceso denegado: Los usuarios con cargo exclusivo de ASESOR se visualizan en los reportes pero no ingresan al panel administrativo.");
+                        if (rolReal === "ASESOR" || !["GERENTE", "JEFE_ZONAL", "ADMINISTRADOR", "LIDER_EQUIPO", "CAJERO"].includes(rolReal)) {
+                            setError("⛔ Acceso denegado: Los usuarios con cargo exclusivo de ASESOR no tienen autorización para ingresar a este panel.");
                             setLoading(false);
                             return;
                         }
@@ -674,21 +610,13 @@
                         onLoginSuccess({
                             token: data.token,
                             usuario: {
-                                ...data.usuario,
-                                nombre: usuarioEnriquecido.usuarioOriginal,
-                                nombreCorto: usuarioEnriquecido.nombreCorto,
+                                ...usuarioCombinado,
                                 cargo: rolReal,
-                                cargoOriginal: usuarioEnriquecido.cargoOriginal,
-                                sede: usuarioEnriquecido.sedePrincipal,
-                                sedePrincipal: usuarioEnriquecido.sedePrincipal,
-                                sedesZona: usuarioEnriquecido.sedesZona,
-                                area: usuarioEnriquecido.area,
-                                equipo: usuarioEnriquecido.equipo,
-                                jefeAsignado: usuarioEnriquecido.jefeAsignado
+                                letraEquipo: letraEquipoDetectada
                             }
                         }, remember);
                     } else {
-                        setError(data?.message || "❌ Credenciales inválidas o usuario no habilitado en el Script de Usuarios.");
+                        setError(data?.message || "❌ Credenciales inválidas o usuario no autorizado.");
                     }
                 } catch (err) {
                     setError("⚠️ Error de conexión con el servidor seguro. Verifica tu internet.");
@@ -703,35 +631,39 @@
                         <div className="p-7 text-center bg-slate-50 border-b border-slate-100 flex flex-col items-center">
                             <CredibanLogo size="lg" />
                             <p className="mt-3 text-xs font-extrabold text-slate-500 uppercase tracking-wider">
-                                Sistema Conectado al Script Oficial de Usuarios
+                                Sistema Ejecutivo de Estadísticas, Desembolsos y Metas
                             </p>
                             <div className="mt-2 inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-800 border border-emerald-200 px-3 py-1 rounded-full text-[10px] font-bold">
-                                🔐 Gerencia • Zonales • Admin • Jefes de Equipo/Grupales • Caja
+                                🔐 Gerencia • Jefes Zonales • Administración • Líderes (A-J) • Caja
                             </div>
                         </div>
 
                         <form onSubmit={handleLogin} className="p-7 space-y-4">
                             <div>
                                 <div className="flex justify-between items-center mb-1">
-                                    <label className="text-xs font-extrabold text-slate-600 uppercase">👤 Usuario (Script Usuarios)</label>
+                                    <label className="text-xs font-extrabold text-slate-600 uppercase">👤 Usuario Autorizado</label>
                                     {usuariosAutorizadosLista.length > 0 && (
                                         <button type="button" onClick={() => setUseDropdown(!useDropdown)} className="text-[11px] font-bold text-[#59B447] hover:underline">
-                                            {useDropdown ? "✍️ Escribir manual" : "📋 Elegir de lista oficial"}
+                                            {useDropdown ? "✍️ Escribir manual" : "📋 Elegir de lista"}
                                         </button>
                                     )}
                                 </div>
 
                                 {useDropdown && usuariosAutorizadosLista.length > 0 ? (
                                     <select value={usuario} onChange={e => setUsuario(e.target.value)} className="w-full border border-slate-300 rounded-xl px-3.5 py-3 text-sm font-bold bg-slate-50 focus:bg-white focus:ring-2 focus:ring-[#59B447] outline-none">
-                                        <option value="">-- Selecciona tu Usuario Oficial --</option>
-                                        {usuariosAutorizadosLista.map((u, i) => (
-                                            <option key={i} value={u.usuarioOriginal}>
-                                                {u.usuarioOriginal} ({u.cargoOriginal} - {u.sedePrincipal})
-                                            </option>
-                                        ))}
+                                        <option value="">-- Selecciona tu Usuario --</option>
+                                        {usuariosAutorizadosLista.map((u, i) => {
+                                            const nom = u.usuario || u.nombre;
+                                            const letEq = extraerLetraEquipo(u);
+                                            return (
+                                                <option key={i} value={nom}>
+                                                    {nom} ({u.cargo}{letEq ? ` - Equipo ${letEq}` : ""} - {u.sede})
+                                                </option>
+                                            );
+                                        })}
                                     </select>
                                 ) : (
-                                    <input type="text" value={usuario} onChange={e => setUsuario(e.target.value)} placeholder="Ej: CRISTHIAN.TRINIDAD, JOSE.SAENZV..." className="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm font-bold bg-slate-50 focus:bg-white focus:ring-2 focus:ring-[#59B447] outline-none" autoComplete="username" required />
+                                    <input type="text" value={usuario} onChange={e => setUsuario(e.target.value)} placeholder="Ingresa tu usuario..." className="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm font-bold bg-slate-50 focus:bg-white focus:ring-2 focus:ring-[#59B447] outline-none" autoComplete="username" required />
                                 )}
                             </div>
 
@@ -753,7 +685,7 @@
                             </label>
 
                             <button type="submit" disabled={loading} className="w-full bg-[#59B447] hover:bg-[#4a9c3a] active:scale-[0.99] text-white font-extrabold py-3.5 rounded-2xl shadow-lg transition-all text-sm uppercase tracking-wider disabled:opacity-50">
-                                {loading ? "🔐 Verificando en Script de Usuarios..." : "Ingresar al Sistema ➔"}
+                                {loading ? "🔐 Verificando Credenciales..." : "Ingresar al Sistema ➔"}
                             </button>
                         </form>
                     </div>
@@ -1096,334 +1028,7 @@
                 </div>
             );
         }
-
-        // ============================================================================
-        // 6. COMPONENTES DE GRÁFICOS VECTORIALES CORREGIDOS (NOMBRES CORTOS NOMBRE.A)
-        // ============================================================================
-        function LienzoSVGLineal({
-            titulo, subtitulo = "", etiquetaEjeY, serieActual, serieComparada = null,
-            mostrarTendencia = false, mostrarComparativa = false, modoSuperpuesto = false,
-            colorPrincipal = "#2563eb", colorComparado = "#f59e0b", altura = 230,
-            diaSeleccionado = null, onSelectDia = null
-        }) {
-            const [hoverIdx, setHoverIdx] = React.useState(null);
-            const width = 580;
-            const height = altura;
-            const padLeft = 74;
-            const padRight = 20;
-            const padTop = 24;
-            const padBottom = 38;
-            const plotW = width - padLeft - padRight;
-            const plotH = height - padTop - padBottom;
-
-            const nPuntos = serieActual.length || 31;
-
-            const maxValRaw = React.useMemo(() => {
-                let m = 1000;
-                serieActual.forEach(p => { if (p.valor > m) m = p.valor; });
-                if (mostrarComparativa && Array.isArray(serieComparada)) {
-                    serieComparada.forEach(p => { if (p.valor > m) m = p.valor; });
-                }
-                if (m <= 1500) return 1500;
-                if (m <= 3000) return 3000;
-                if (m <= 6000) return 6000;
-                if (m <= 8000) return 8000;
-                if (m <= 10000) return 10000;
-                if (m <= 15000) return 15000;
-                if (m <= 25000) return 25000;
-                if (m <= 30000) return 30000;
-                return Math.ceil(m / 10000) * 10000;
-            }, [serieActual, serieComparada, mostrarComparativa]);
-
-            const getX = (idx) => padLeft + (idx / Math.max(1, nPuntos - 1)) * plotW;
-            const getY = (val) => padTop + plotH - (Math.min(maxValRaw, Math.max(0, val)) / maxValRaw) * plotH;
-
-            const puntosActual = serieActual.map((p, i) => `${getX(i).toFixed(1)},${getY(p.valor).toFixed(1)}`).join(" ");
-            const areaActual = `${getX(0).toFixed(1)},${(padTop + plotH).toFixed(1)} ${puntosActual} ${getX(nPuntos - 1).toFixed(1)},${(padTop + plotH).toFixed(1)}`;
-
-            const puntosComp = (mostrarComparativa && Array.isArray(serieComparada))
-                ? serieComparada.map((p, i) => `${getX(i).toFixed(1)},${getY(p.valor).toFixed(1)}`).join(" ")
-                : "";
-            const areaComp = puntosComp
-                ? `${getX(0).toFixed(1)},${(padTop + plotH).toFixed(1)} ${puntosComp} ${getX(nPuntos - 1).toFixed(1)},${(padTop + plotH).toFixed(1)}`
-                : "";
-
-            const lineaTendencia = React.useMemo(() => {
-                if (!mostrarTendencia || serieActual.length < 2) return null;
-                let ultimoIdxConDatos = 22;
-                serieActual.forEach((p, idx) => { if (p.valor > 0) ultimoIdxConDatos = Math.max(ultimoIdxConDatos, idx); });
-                const sub = serieActual.slice(0, ultimoIdxConDatos + 1);
-                const n = sub.length;
-                let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
-                sub.forEach((p, i) => {
-                    sumX += i;
-                    sumY += p.valor;
-                    sumXY += i * p.valor;
-                    sumXX += i * i;
-                });
-                const denom = (n * sumXX - sumX * sumX);
-                if (denom === 0) return null;
-                const slope = (n * sumXY - sumX * sumY) / denom;
-                const intercept = (sumY - slope * sumX) / n;
-                const yStart = Math.max(0, intercept);
-                const yEnd = Math.max(0, slope * (nPuntos - 1) + intercept);
-                return { x1: getX(0), y1: getY(yStart), x2: getX(nPuntos - 1), y2: getY(yEnd) };
-            }, [serieActual, mostrarTendencia, maxValRaw]);
-
-            const nivelesY = [0, 0.25, 0.5, 0.75, 1].map(f => Math.round(maxValRaw * f));
-
-            return (
-                <div className="bg-white border-2 border-slate-200 rounded-2xl p-4 shadow-sm hover:shadow-md transition relative overflow-hidden">
-                    <div className="flex flex-wrap justify-between items-start gap-2 mb-1">
-                        <div>
-                            <h4 className="text-xs sm:text-sm font-black text-slate-800 uppercase tracking-tight">{titulo}</h4>
-                            {subtitulo && <p className="text-[10px] font-bold text-slate-400">{subtitulo}</p>}
-                        </div>
-                        {hoverIdx !== null && serieActual[hoverIdx] && (
-                            <div className="text-[11px] font-black bg-slate-900 text-white px-2.5 py-0.5 rounded-lg shadow">
-                                {serieActual[hoverIdx].etiqueta}: <span className="text-emerald-400">{formatShortSoles(serieActual[hoverIdx].valor)}</span>
-                                {mostrarComparativa && serieComparada && serieComparada[hoverIdx] && (
-                                    <span className="text-amber-300 ml-1.5">| Ant: {formatShortSoles(serieComparada[hoverIdx].valor)}</span>
-                                )}
-                            </div>
-                        )}
-                    </div>
-
-                    <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto select-none">
-                        {nivelesY.map((val, idx) => {
-                            const yPos = getY(val);
-                            return (
-                                <g key={idx}>
-                                    <line x1={padLeft} y1={yPos} x2={width - padRight} y2={yPos} stroke={idx === 0 ? "#475569" : "#e2e8f0"} strokeWidth={idx === 0 ? "1.5" : "1"} />
-                                    <text x={padLeft - 8} y={yPos + 3.5} textAnchor="end" fontSize="10" fontWeight="700" fill="#334155">
-                                        {formatShortSoles(val)}
-                                    </text>
-                                </g>
-                            );
-                        })}
-
-                        {serieActual.map((p, idx) => {
-                            const numDia = idx + 1;
-                            const mostrarTick = nPuntos <= 12 || numDia % 5 === 0 || numDia === 1;
-                            const xPos = getX(idx);
-                            const esDiaMarcado = diaSeleccionado && Number(diaSeleccionado) === numDia && nPuntos >= 28;
-                            return (
-                                <g key={idx}>
-                                    {esDiaMarcado && (
-                                        <line x1={xPos} y1={padTop} x2={xPos} y2={padTop + plotH} stroke="#10b981" strokeWidth="2" strokeDasharray="3 2" />
-                                    )}
-                                    {mostrarTick && (
-                                        <>
-                                            <line x1={xPos} y1={padTop} x2={xPos} y2={padTop + plotH} stroke="#f1f5f9" strokeWidth="1" />
-                                            <text x={xPos} y={padTop + plotH + 15} textAnchor="middle" fontSize="10" fontWeight="700" fill="#1e293b">
-                                                {p.tickLabel || numDia}
-                                            </text>
-                                        </>
-                                    )}
-                                </g>
-                            );
-                        })}
-
-                        <text x={12} y={padTop + plotH / 2} transform={`rotate(-90, 12, ${padTop + plotH / 2})`} textAnchor="middle" fontSize="9.5" fontWeight="800" fill="#475569">
-                            {etiquetaEjeY}
-                        </text>
-
-                        <text x={padLeft + plotW / 2} y={height - 4} textAnchor="middle" fontSize="10" fontWeight="800" fill="#475569">
-                            {nPuntos >= 28 ? "DÍA DEL MES (Haz clic en un punto para inspeccionar el día)" : "PERIODO"}
-                        </text>
-
-                        {mostrarComparativa && puntosComp && (
-                            <g>
-                                {modoSuperpuesto && <polygon points={areaComp} fill={colorComparado} fillOpacity="0.22" />}
-                                <polyline fill="none" stroke={colorComparado} strokeWidth={modoSuperpuesto ? "2" : "2.2"} strokeDasharray={modoSuperpuesto ? "4 3" : "5 3"} points={puntosComp} />
-                            </g>
-                        )}
-
-                        <polygon points={areaActual} fill={colorPrincipal} fillOpacity={modoSuperpuesto ? "0.28" : "0.12"} />
-
-                        {lineaTendencia && (
-                            <line x1={lineaTendencia.x1} y1={lineaTendencia.y1} x2={lineaTendencia.x2} y2={lineaTendencia.y2} stroke="#93c5fd" strokeWidth="2" />
-                        )}
-
-                        <polyline fill="none" stroke={colorPrincipal} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" points={puntosActual} />
-
-                        {serieActual.map((p, idx) => {
-                            const cx = getX(idx);
-                            const cy = getY(p.valor);
-                            const numDia = idx + 1;
-                            const esDiaActivo = diaSeleccionado && Number(diaSeleccionado) === numDia && nPuntos >= 28;
-                            return (
-                                <g
-                                    key={idx}
-                                    onMouseEnter={() => setHoverIdx(idx)}
-                                    onMouseLeave={() => setHoverIdx(null)}
-                                    onClick={() => { if (onSelectDia && nPuntos >= 28) onSelectDia(String(numDia)); }}
-                                    className="cursor-pointer"
-                                >
-                                    {(p.valor > 0 || hoverIdx === idx || esDiaActivo) && (
-                                        <circle
-                                            cx={cx}
-                                            cy={cy}
-                                            r={esDiaActivo ? "6" : hoverIdx === idx ? "5" : "3"}
-                                            fill={esDiaActivo ? "#10b981" : colorPrincipal}
-                                            stroke="#ffffff"
-                                            strokeWidth="1.5"
-                                        />
-                                    )}
-                                    <rect x={cx - (plotW / nPuntos) / 2} y={padTop} width={plotW / nPuntos} height={plotH} fill="transparent" />
-                                </g>
-                            );
-                        })}
-                    </svg>
-                </div>
-            );
-        }
-
-        function GraficoColumnasVerticalesSVG({
-            titulo = "🏆 Cumplimiento de Metas por Asesor de Negocios",
-            items = [],
-            modoVisual = "MISMO_GRAFICO",
-            mostrarComparativa = false,
-            labelActual = "MES ACTUAL",
-            labelComparado = "MES ANTERIOR",
-            tipoUnidad = "PORCENTAJE"
-        }) {
-            const formatearEtiqueta = (v) => {
-                if (tipoUnidad === "PORCENTAJE") return `${parseNum(v).toFixed(1)}%`;
-                return formatShortSoles(v);
-            };
-
-            const renderizarCanvasColumnas = (lista, tituloCanvas, mostrarDosSeries, esSuperpuesto, usarSerieAnteriorComoUnica = false) => {
-                let maxVal = 125;
-                if (tipoUnidad === "PORCENTAJE") {
-                    lista.forEach(it => {
-                        maxVal = Math.max(maxVal, parseNum(it.actualPct), mostrarDosSeries ? parseNum(it.anteriorPct) : 0);
-                    });
-                    maxVal = Math.ceil(maxVal / 25) * 25;
-                } else {
-                    maxVal = 10000;
-                    lista.forEach(it => {
-                        maxVal = Math.max(maxVal, parseNum(it.actualMonto), mostrarDosSeries ? parseNum(it.anteriorMonto) : 0, parseNum(it.meta));
-                    });
-                    maxVal = Math.ceil(maxVal / 10000) * 10000;
-                }
-
-                const niveles = [0, 0.2, 0.4, 0.6, 0.8, 1].map(f => maxVal * f);
-
-                return (
-                    <div className="bg-white border-2 border-slate-200 rounded-2xl p-4 shadow-sm overflow-hidden">
-                        <div className="flex flex-wrap justify-between items-start gap-2 mb-3">
-                            <div>
-                                <h4 className="text-xs sm:text-sm font-black text-slate-800 uppercase tracking-tight">{tituloCanvas}</h4>
-                                <p className="text-[10px] font-bold text-slate-400">
-                                    Eje Vertical: {tipoUnidad === "PORCENTAJE" ? "% de Cumplimiento de Meta" : "Monto Desembolsado (S/.)"}
-                                </p>
-                            </div>
-                            <div className="flex flex-wrap items-center gap-3 text-[11px] font-bold">
-                                {!usarSerieAnteriorComoUnica && (
-                                    <span className="inline-flex items-center gap-1.5">
-                                        <span className="w-3 h-3 rounded-sm bg-[#16bb67] inline-block"></span>
-                                        <span>{labelActual}</span>
-                                    </span>
-                                )}
-                                {(mostrarDosSeries || usarSerieAnteriorComoUnica) && (
-                                    <span className="inline-flex items-center gap-1.5">
-                                        <span className="w-3 h-3 rounded-sm bg-indigo-500 inline-block"></span>
-                                        <span>{labelComparado}</span>
-                                    </span>
-                                )}
-                            </div>
-                        </div>
-
-                        <div className="overflow-x-auto pb-2">
-                            <div style={{ minWidth: `${Math.max(420, lista.length * 72)}px` }} className="relative pl-14 pr-3 pt-7 pb-9">
-                                <div className="relative h-60 border-b-2 border-slate-600 flex items-end justify-around gap-2 px-2">
-                                    {niveles.map((niv, idx) => {
-                                        const bottomPct = (niv / maxVal) * 100;
-                                        return (
-                                            <div key={idx} style={{ bottom: `${bottomPct}%` }} className="absolute left-0 right-0 border-t border-slate-200 pointer-events-none">
-                                                <span className="absolute -left-14 -top-2 w-12 text-right text-[9.5px] font-extrabold text-slate-600">
-                                                    {tipoUnidad === "PORCENTAJE" ? `${niv.toFixed(0)}%` : formatShortSoles(niv)}
-                                                </span>
-                                            </div>
-                                        );
-                                    })}
-
-                                    {lista.map((it, idx) => {
-                                        const vAct = tipoUnidad === "PORCENTAJE" ? parseNum(it.actualPct) : parseNum(it.actualMonto);
-                                        const vAnt = tipoUnidad === "PORCENTAJE" ? parseNum(it.anteriorPct) : parseNum(it.anteriorMonto);
-                                        const valorPrimario = usarSerieAnteriorComoUnica ? vAnt : vAct;
-                                        const diff = vAct - vAnt;
-
-                                        const hActPct = Math.min(100, Math.max(valorPrimario > 0 ? 3 : 1, (valorPrimario / maxVal) * 100));
-                                        const hAntPct = Math.min(100, Math.max(vAnt > 0 ? 3 : 1, (vAnt / maxVal) * 100));
-
-                                        return (
-                                            <div key={idx} className="flex-1 min-w-[60px] max-w-[100px] h-full flex flex-col justify-end items-center relative z-10 px-0.5">
-                                                {mostrarDosSeries && (
-                                                    <div className={`mb-1 px-1 py-0.2 rounded text-[8.5px] font-black leading-tight text-center truncate max-w-full ${diff > 0 ? "bg-emerald-100 text-emerald-800" : diff < 0 ? "bg-rose-100 text-rose-700" : "bg-slate-100 text-slate-500"}`}>
-                                                        {diff > 0 ? `+${tipoUnidad === "PORCENTAJE" ? diff.toFixed(0) + "%" : formatShortSoles(diff)}` : diff < 0 ? `${tipoUnidad === "PORCENTAJE" ? diff.toFixed(0) + "%" : formatShortSoles(diff)}` : "0%"}
-                                                    </div>
-                                                )}
-
-                                                {(!mostrarDosSeries || esSuperpuesto) ? (
-                                                    <div className="w-full h-full flex items-end justify-center relative">
-                                                        {mostrarDosSeries && esSuperpuesto && (
-                                                            <div
-                                                                style={{ height: `${hAntPct}%` }}
-                                                                className="w-10/12 bg-indigo-500/30 border-2 border-dashed border-indigo-600 rounded-t-md absolute bottom-0 transition-all duration-500"
-                                                                title={`${labelComparado}: ${formatearEtiqueta(vAnt)}`}
-                                                            ></div>
-                                                        )}
-
-                                                        <div
-                                                            style={{ height: `${hActPct}%` }}
-                                                            className={`${esSuperpuesto && mostrarDosSeries ? "w-6/12 z-10 shadow-md" : "w-8/12"} ${usarSerieAnteriorComoUnica ? "bg-indigo-500" : "bg-[#16bb67] hover:bg-[#129e56]"} rounded-t-md transition-all duration-500 relative flex justify-center`}
-                                                        >
-                                                            <span className={`text-[9.5px] font-black whitespace-nowrap ${hActPct > 82 ? "-top-4 text-[#129e56] absolute" : hActPct > 20 ? "mt-1 text-slate-950" : "-top-4 text-[#129e56] absolute"}`}>
-                                                                {formatearEtiqueta(valorPrimario)}
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                ) : (
-                                                    <div className="w-full h-full flex items-end justify-center gap-0.5">
-                                                        <div style={{ height: `${hActPct}%` }} className="w-5/12 bg-[#16bb67] rounded-t-sm transition-all duration-500 relative flex justify-center" title={`${labelActual}: ${formatearEtiqueta(vAct)}`}>
-                                                            <span className="absolute -top-3.5 text-[8.5px] font-black text-emerald-800 whitespace-nowrap">{formatearEtiqueta(vAct)}</span>
-                                                        </div>
-                                                        <div style={{ height: `${hAntPct}%` }} className="w-5/12 bg-indigo-500 rounded-t-sm transition-all duration-500 relative flex justify-center" title={`${labelComparado}: ${formatearEtiqueta(vAnt)}`}>
-                                                            <span className="absolute -top-3.5 text-[8.5px] font-bold text-indigo-700 whitespace-nowrap">{formatearEtiqueta(vAnt)}</span>
-                                                        </div>
-                                                    </div>
-                                                )}
-
-                                                <div className="absolute -bottom-6 text-[10px] font-black text-slate-800 uppercase tracking-tight text-center truncate w-full px-0.5" title={it.concepto}>
-                                                    {it.concepto}
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                                <div className="text-center text-[10px] font-black text-slate-500 uppercase mt-6">
-                                    ASESORES OFICIALES (FORMATO: NOMBRE.A)
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                );
-            };
-
-            if (mostrarComparativa && modoVisual === "LADO_A_LADO") {
-                return (
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                        {renderizarCanvasColumnas(items, `${titulo} (${labelActual})`, false, false, false)}
-                        {renderizarCanvasColumnas(items, `${titulo} (${labelComparado})`, false, false, true)}
-                    </div>
-                );
-            }
-
-            return renderizarCanvasColumnas(items, titulo, mostrarComparativa, modoVisual === "SUPERPUESTO", false);
-        }
-        // ============================================================================
+// ============================================================================
         // 6B. PANEL EJECUTIVO DE ESTADÍSTICAS (CON ANÁLISIS INTERACTIVO POR DÍA)
         // ============================================================================
         function PanelGraficosEstadisticos({
